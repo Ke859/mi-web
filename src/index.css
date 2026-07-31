@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-deep-950: #050505;
+  --color-deep-900: #0a0a0f;
+  --color-deep-800: #111118;
+  --color-deep-700: #1a1a28;
+  --color-stone-300: #c4b89e;
+  --color-stone-400: #a8987a;
+  --color-stone-500: #8a7f6e;
+  --color-stone-600: #6b6254;
+  --color-gold-300: #d4b96a;
+  --color-gold-400: #c9a84c;
+  --color-gold-500: #b8942e;
+  --color-gold-600: #8a6d2b;
+  --color-gold-700: #5c4820;
+  --font-display: 'Cinzel', serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-deep-950);
+    color: var(--color-stone-300);
+    font-family: var(--font-body);
+    overflow-x: hidden;
+  }
+  ::selection {
+    background-color: var(--color-gold-500);
+    color: var(--color-deep-950);
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-deep-950);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-gold-700);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gold-600);
+  }
+}
+
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: 0 0 40px rgba(201, 168, 76, 0.3), 0 0 80px rgba(201, 168, 76, 0.1);
+  }
+  .text-gradient-gold {
+    background: linear-gradient(135deg, var(--color-gold-300), var(--color-gold-500));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
