@@ -10,34 +10,26 @@ interface Message {
 }
 
 const responses: Record<string, string> = {
-  horario: 'Abrimos de lunes a domingo de 8:00 a 17:00.',
-  precio: 'Cada entrada tiene un costo de $15.000 COP por persona. El tour guiado dura aproximadamente 2 horas.',
-  duracion: 'El recorrido dura aproximadamente 2 horas, recorriendo 1.5 km de senderos iluminados dentro de la cueva.',
-  llevar: 'Recomendamos llevar ropa cómoda, calzado cerrado y una chaqueta ligera. Nosotros proporcionamos casco y linterna.',
-  niños: '¡Sí! El recorrido es apto para mayores de 5 años. Los niños deben ir acompañados de un adulto.',
-  seguro: 'Completamente seguro. Contamos con pasarelas, barandales, iluminación LED y guías certificados en primeros auxilios.',
-  murcielagos: 'Sí, la colonia habita la cueva permanentemente. La mejor hora para verlos más activos es al atardecer.',
-  ubicacion: 'Estamos en la Carretera Federal Km 14, Zona Arqueológica, Yucatán, México. Puedes ver el mapa en la sección de Ubicación.',
+  horario: '🕐 Abrimos de lunes a domingo de 8:00 a 17:00. ¡Te esperamos! 🦇',
+  precio: '💰 Cada entrada tiene un costo de $15.000 COP por persona. 🎟️',
+  ubicacion: '📍 Estamos en Santa Sofía, Colombia. Puedes ver el mapa y abrir la ubicación en Google Maps desde la sección de Ubicación de la página. 🗺️',
 }
 
 const defaultAnswers = [
-  '¡Hola! Soy el asistente virtual de DARKBAT. Puedo ayudarte con horarios, precios, qué llevar, seguridad y más. ¿En qué puedo ayudarte?',
+  '¡Hola! 👋 Soy el asistente virtual de DARKBAT 🦇. Puedo ayudarte con horarios 🕐, precios 💰, ubicación 📍, verificar tu pago ✅ y consultar tus últimas reservas 📋. ¿En qué puedo ayudarte? 😊',
 ]
+
+const suggestionChips = ['🦇 Verificar mi pago', '📋 Mis últimas 3 reservas', '⏰ Horarios', '💰 Precios', '📍 Ubicación']
 
 function getAnswer(input: string): string {
   const lower = input.toLowerCase()
   if (lower.includes('horario') || lower.includes('hora') || lower.includes('abren') || lower.includes('domingo')) return responses.horario
-  if (lower.includes('precio') || lower.includes('costo') || lower.includes('vale') || lower.includes('cuesta') || lower.includes('pago')) return responses.precio
-  if (lower.includes('dura') || lower.includes('tiempo') || lower.includes('recorrido') || lower.includes('largo')) return responses.duracion
-  if (lower.includes('llevar') || lower.includes('ropa') || lower.includes('traer') || lower.includes('necesito')) return responses.llevar
-  if (lower.includes('niño') || lower.includes('niña') || lower.includes('menor') || lower.includes('familia')) return responses.niños
-  if (lower.includes('seguro') || lower.includes('peligro') || lower.includes('riesgo')) return responses.seguro
-  if (lower.includes('murciélago') || lower.includes('murcielago') || lower.includes('bat') || lower.includes('vuelan')) return responses.murcielagos
+  if (lower.includes('precio') || lower.includes('costo') || lower.includes('vale') || lower.includes('cuesta')) return responses.precio
   if (lower.includes('ubicación') || lower.includes('ubicacion') || lower.includes('mapa') || lower.includes('donde') || lower.includes('llegar')) return responses.ubicacion
-  return 'Lo siento, no tengo esa información. ¿Puedes preguntarme sobre horarios, precios, duración del recorrido, qué llevar, seguridad o ubicación?'
+  return '🤔 Lo siento, no tengo esa información. Puedo ayudarte con horarios 🕐, precios 💰, ubicación 📍, verificar tu pago ✅ o consultar tus últimas reservas 📋. 😊'
 }
 
-type ChatStep = 'idle' | 'awaiting_name' | 'awaiting_date'
+type ChatStep = 'idle' | 'awaiting_name' | 'awaiting_whatsapp'
 
 export function ChatBot() {
   const [isOpen, setIsOpen] = useState(false)
@@ -59,38 +51,45 @@ export function ChatBot() {
     setIsTyping(false)
   }, [])
 
-  const handlePaymentCheck = useCallback(async (name: string, date: string) => {
+  const handlePaymentCheck = useCallback(async (name: string, whatsapp: string) => {
     setIsTyping(true)
     try {
+      const cleanNumber = whatsapp.replace(/[\s\-()]/g, '')
       const { data, error } = await supabase
         .from('bookings')
-        .select('payment_status, total_cop, visit_date, visit_time')
+        .select('payment_status, total_cop, visit_date, visit_time, people, lunch, whatsapp, created_at')
         .eq('name', name.trim())
-        .eq('visit_date', date)
-        .limit(1)
+        .order('created_at', { ascending: false })
+        .limit(3)
 
       if (error) throw error
 
-      if (!data || data.length === 0) {
-        await addBotMsg(`No encontré ninguna reserva con el nombre "${name}" para el día "${date}". Verifica que los datos sean correctos.`)
+      const filtered = (data || []).filter((booking) => booking.whatsapp === undefined || booking.whatsapp?.replace(/[\s\-()]/g, '') === cleanNumber)
+
+      if (filtered.length === 0) {
+        await addBotMsg(`😢 No se encontraron resultados para el nombre "${name.trim()}" y el número de celular ${whatsapp.trim()}. Verifica que sean los mismos con los que hiciste la reserva. 🤔`)
       } else {
-        const { payment_status, total_cop, visit_date, visit_time } = data[0]
         const statusMap: Record<string, string> = {
           pending_confirmation: '⏳ Pendiente de confirmación',
           confirmed: '✅ Pagado y confirmado',
+          approved: '✅ Pagado y confirmado',
           cancelled: '❌ Cancelado',
         }
-        const status = statusMap[payment_status] || payment_status
-        await addBotMsg(`Reserva encontrada:\n- Fecha: ${visit_date} a las ${visit_time}\n- Total: $${total_cop?.toLocaleString('es-CO')} COP\n- Estado: ${status}`)
+        const lines = filtered.map((booking, index) => {
+          const status = statusMap[booking.payment_status] || booking.payment_status
+          const lunch = booking.lunch === 'yes' ? '🍽️ Con almuerzo' : 'Sin almuerzo'
+          return `${index + 1}. 📅 ${booking.visit_date} ⏰ ${booking.visit_time} · 👥 ${booking.people} pers · ${lunch}\n   💰 $${booking.total_cop?.toLocaleString('es-CO')} COP · ${status}`
+        })
+        await addBotMsg(`🎉 ¡Encontré tus últimas ${filtered.length} reserva(s) a nombre de "${name.trim()}"! 🦇✨\n\n${lines.join('\n')}\n\n¿Necesitas algo más? 😊`)
       }
     } catch {
-      await addBotMsg('Ocurrió un error al consultar el pago. Intenta de nuevo más tarde.')
+      await addBotMsg('Ocurrió un error al consultar tus reservas. Intenta de nuevo más tarde.')
     }
     setStep('idle')
   }, [addBotMsg])
 
-  const handleSend = () => {
-    const text = input.trim()
+  const handleSend = (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text) return
 
     const userMsg: Message = { id: idRef.current++, text, isUser: true }
@@ -102,13 +101,13 @@ export function ChatBot() {
     // Conversation flow
     if (step === 'awaiting_name') {
       setVerifyName(text)
-      setStep('awaiting_date')
+      setStep('awaiting_whatsapp')
       setIsTyping(true)
-      addBotMsg('¿Y la fecha de tu visita? (formato: YYYY-MM-DD)')
+      addBotMsg('¡Perfecto! 👍 Para verificar tu identidad, dime el número de WhatsApp 📱 con el que hiciste la reserva.')
       return
     }
 
-    if (step === 'awaiting_date') {
+    if (step === 'awaiting_whatsapp') {
       setIsTyping(true)
       handlePaymentCheck(verifyName, text)
       return
@@ -118,11 +117,18 @@ export function ChatBot() {
     if (lower.includes('verificar') && (lower.includes('pago') || lower.includes('reserva'))) {
       setStep('awaiting_name')
       setIsTyping(true)
-      addBotMsg('Claro. Dime tu nombre completo con el que hiciste la reserva.')
+      addBotMsg('¡Claro! ✅ Dime tu nombre completo con el que hiciste la reserva. 😊')
       return
     }
 
     if (lower.includes('confirmar') && (lower.includes('pago') || lower.includes('reserva'))) {
+      setStep('awaiting_name')
+      setIsTyping(true)
+      addBotMsg('¡Claro! ✅ Dime tu nombre completo con el que hiciste la reserva. 😊')
+      return
+    }
+
+    if (lower.includes('mis reservas') || lower.includes('estado de mi') || (lower.includes('reservas') && !lower.includes('hacer'))) {
       setStep('awaiting_name')
       setIsTyping(true)
       addBotMsg('Claro. Dime tu nombre completo con el que hiciste la reserva.')
@@ -142,6 +148,10 @@ export function ChatBot() {
       e.preventDefault()
       handleSend()
     }
+  }
+
+  const sendChip = (text: string) => {
+    handleSend(text)
   }
 
   return (
@@ -171,7 +181,7 @@ export function ChatBot() {
               <X className="w-6 h-6 text-deep-950" />
             </div>
           ) : (
-            <img src="/bat-logo.png" alt="" className="w-full h-full object-cover" />
+            <img src="/chatbot-avatar.png" alt="" className="w-full h-full object-cover" />
           )}
         </motion.button>
       </div>
@@ -184,12 +194,12 @@ export function ChatBot() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="fixed bottom-24 left-4 sm:left-6 z-50 w-[calc(100vw-2rem)] sm:w-80 md:w-96 h-[500px] max-h-[70vh] rounded-2xl border border-white/10 bg-deep-950/95 backdrop-blur-xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden"
+            className="fixed bottom-24 left-4 sm:left-6 z-50 w-[calc(100vw-2rem)] max-w-[24rem] h-[500px] max-h-[70dvh] rounded-2xl border border-white/10 bg-deep-950/95 backdrop-blur-xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center gap-3 p-4 border-b border-white/5 bg-gradient-to-r from-gold-500/10 to-transparent">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                <img src="/bat-logo.png" alt="" className="w-5 h-5 object-contain" />
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center overflow-hidden">
+                <img src="/chatbot-avatar.png" alt="" className="w-full h-full object-cover" />
               </div>
               <div>
                 <p className="text-white text-sm font-semibold">Asistente DARKBAT</p>
@@ -234,8 +244,22 @@ export function ChatBot() {
               )}
             </div>
 
+            {/* Suggestion chips */}
+            <div className="px-4 pb-2 flex flex-wrap gap-2">
+              {suggestionChips.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => sendChip(chip)}
+                  className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-stone-300 hover:border-gold-500/40 hover:text-gold-300 transition-all"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
             {/* Input */}
-            <div className="p-4 border-t border-white/5">
+            <div className="px-4 pb-4 pt-1 border-t border-white/5">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -246,7 +270,7 @@ export function ChatBot() {
                   className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-stone-600 focus:outline-none focus:ring-2 focus:ring-gold-500/40 transition-all"
                 />
                 <button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={!input.trim()}
                   className="p-2.5 rounded-xl bg-gold-500 text-deep-950 hover:bg-gold-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   aria-label="Enviar"

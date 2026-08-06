@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { contactInfo } from '../../data/content'
 import type { BookingFormData } from '../../types'
 
-const initialForm: BookingFormData = { name: '', email: '', whatsapp: '', date: '', time: '', people: '5', comments: '' }
+const initialForm: BookingFormData = { name: '', email: '', whatsapp: '', date: '', time: '', people: '5', lunch: '', comments: '' }
 const fieldClass = 'w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder:text-stone-600 focus:outline-none focus:ring-2 focus:ring-gold-500/40 transition-all'
 
 type FormErrors = Partial<Record<keyof BookingFormData, string>>
@@ -23,6 +23,16 @@ export function Booking() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [copied, setCopied] = useState(false)
   const total = (parseInt(form.people) || 0) * 15000
+  const depositRate = (() => {
+    const people = Number(form.people) || 0
+    if (people >= 5 && people <= 10) return 0.10
+    if (people >= 11 && people <= 20) return 0.15
+    if (people >= 21 && people <= 30) return 0.20
+    if (people >= 31 && people <= 40) return 0.25
+    if (people >= 41 && people <= 50) return 0.30
+    return 0.10
+  })()
+  const deposit = Math.round(total * depositRate)
   const today = new Date().toISOString().split('T')[0]
 
   const set = (field: keyof BookingFormData, value: string) => {
@@ -72,8 +82,8 @@ export function Booking() {
     }
     const { error: bookingError } = await supabase.from('bookings').insert({
       name: form.name.trim(), email: form.email.trim(), whatsapp: form.whatsapp.trim(), visit_date: form.date,
-      visit_time: form.time, people: Number(form.people), comments: form.comments.trim() || null,
-      total_cop: total, receipt_path: receiptPath, payment_status: 'pending_confirmation',
+      visit_time: form.time, people: Number(form.people), lunch: form.lunch, comments: form.comments.trim() || null,
+      total_cop: total, deposit_rate: depositRate, deposit_cop: deposit, receipt_path: receiptPath, payment_status: 'pending_confirmation',
     })
     if (bookingError) {
       await supabase.storage.from('payment-receipts').remove([receiptPath])
@@ -87,7 +97,7 @@ export function Booking() {
   }
 
   const notifyAdmin = () => {
-    const msg = `🦇 *Nueva reserva DARKBAT*%0A%0A👤 *Nombre:* ${form.name}%0A📧 *Correo:* ${form.email}%0A📱 *WhatsApp:* ${form.whatsapp}%0A📅 *Fecha:* ${form.date}%0A⏰ *Hora:* ${form.time}%0A👥 *Personas:* ${form.people}%0A💰 *Total:* $${total.toLocaleString('es-CO')} COP%0A📝 *Comentarios:* ${form.comments || 'Ninguno'}%0A%0A⏳ Estado: Pendiente de confirmación`
+    const msg = `🦇 *Nueva reserva DARKBAT*%0A%0A👤 *Nombre:* ${form.name}%0A📧 *Correo:* ${form.email}%0A📱 *WhatsApp:* ${form.whatsapp}%0A📅 *Fecha:* ${form.date}%0A⏰ *Hora:* ${form.time}%0A👥 *Personas:* ${form.people}%0A🍽️ *Almuerzo:* ${form.lunch === 'yes' ? 'Sí' : 'No'}%0A💰 *Total:* $${total.toLocaleString('es-CO')} COP%0A💳 *Abono (${Math.round(depositRate * 100)}%):* $${deposit.toLocaleString('es-CO')} COP%0A📝 *Comentarios:* ${form.comments || 'Ninguno'}%0A%0A⏳ Estado: Pendiente de confirmación%0A%0A📎 *Adjunta tu comprobante de pago a este chat para confirmar.*`
     window.open(`https://wa.me/${contactInfo.whatsapp}?text=${msg}`, '_blank')
   }
 
@@ -110,8 +120,9 @@ export function Booking() {
               <CheckCircle className="w-14 h-14 text-green-400 mx-auto mb-5" />
               <h3 className="text-2xl font-display font-bold text-white mb-2">Pago en revisión</h3>
               <p className="text-stone-400 max-w-md mx-auto mb-6">Recibimos tu reserva y comprobante. Confirmaremos manualmente que el pago ingresó antes de asegurar tu cupo.</p>
+              <p className="text-sm text-gold-300 mb-6">📎 Se abrió un chat de WhatsApp con DARKBAT: envía allí tu comprobante para confirmar el abono.</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button variant="secondary" size="sm" onClick={notifyAdmin}>Notificar a DARKBAT por WhatsApp</Button>
+                <Button variant="secondary" size="sm" onClick={notifyAdmin}>Reabrir WhatsApp y enviar comprobante</Button>
                 <Button variant="ghost" size="sm" onClick={reset}>Nueva reserva</Button>
               </div>
             </GlassCard></motion.div>
@@ -119,7 +130,7 @@ export function Booking() {
             <motion.div key="payment" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}><GlassCard>
               <button type="button" onClick={() => setStep('details')} className="inline-flex items-center gap-2 text-sm text-stone-400 hover:text-white mb-6"><ArrowLeft className="w-4 h-4" />Editar datos</button>
               <h3 className="font-display text-2xl text-white font-bold">Paga y adjunta el comprobante</h3>
-              <p className="text-stone-400 mt-2">Envía exactamente <strong className="text-gold-300">${total.toLocaleString('es-CO')} COP</strong> a Nequi.</p>
+              <p className="text-stone-400 mt-2">Envía el <strong className="text-gold-300">abono de ${deposit.toLocaleString('es-CO')} COP</strong> ({Math.round(depositRate * 100)}% de ${total.toLocaleString('es-CO')} COP) a Nequi. El resto se paga el día de la visita.</p>
               <div className="my-6 grid sm:grid-cols-2 gap-5 items-center rounded-xl border border-gold-500/20 bg-gold-500/5 p-5">
                 <div>
                   <p className="text-xs text-stone-500 uppercase tracking-wider">Nequi</p>
@@ -166,9 +177,28 @@ export function Booking() {
                 <div><label htmlFor="date" className="block text-sm text-stone-400 mb-1.5">Fecha *</label><div className="relative"><input id="date" type="date" min={today} value={form.date} onChange={(e) => set('date', e.target.value)} className={`${fieldClass} [color-scheme:dark]`} /><Calendar className="w-4 h-4 text-stone-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" /></div>{inputError('date')}</div>
                 <div><label htmlFor="time" className="block text-sm text-stone-400 mb-1.5">Hora *</label><div className="relative"><select id="time" value={form.time} onChange={(e) => set('time', e.target.value)} className={fieldClass}><option value="" className="bg-deep-900">Selecciona una hora</option>{['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'].map((time) => <option key={time} value={time} className="bg-deep-900">{time}</option>)}</select><Clock className="w-4 h-4 text-stone-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" /></div>{inputError('time')}</div>
                 <div><label htmlFor="people" className="block text-sm text-stone-400 mb-1.5">Número de personas *</label><div className="relative"><input id="people" type="number" min={5} max={50} value={form.people} onChange={(e) => set('people', e.target.value)} className={fieldClass} /><UsersIcon className="w-4 h-4 text-stone-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" /></div>{inputError('people')}</div>
+                <div className="md:col-span-2">
+                  <span className="block text-sm text-stone-400 mb-1.5">¿Deseas incluir almuerzo?</span>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {[
+                      { value: 'yes', label: 'Sí, deseo almuerzo' },
+                      { value: 'no', label: 'No, gracias' },
+                    ].map((option) => (
+                      <label key={option.value} className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-all ${form.lunch === option.value ? 'border-gold-500/60 bg-gold-500/10' : 'border-white/10 bg-white/5 hover:bg-white/10'}`}>
+                        <input type="radio" name="lunch" value={option.value} checked={form.lunch === option.value} onChange={(e) => set('lunch', e.target.value)} className="accent-gold-500" />
+                        <span className="text-sm text-white">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.lunch === 'yes' && <p className="mt-2 text-xs text-gold-300 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5 shrink-0" />El almuerzo debe reservarse con al menos una semana de anticipación.</p>}
+                </div>
                 <div className="md:col-span-2"><label htmlFor="comments" className="block text-sm text-stone-400 mb-1.5">Comentarios</label><textarea id="comments" rows={3} value={form.comments} onChange={(e) => set('comments', e.target.value)} className={`${fieldClass} resize-none`} placeholder="Alguna solicitud especial" /></div>
               </div>
-              <div className="mt-6 p-5 rounded-xl border border-gold-500/20 bg-gold-500/5 flex justify-between items-center"><span className="text-stone-400">Total a pagar</span><span className="text-xl font-display font-bold text-gradient-gold">${total.toLocaleString('es-CO')} COP</span></div>
+              <div className="mt-6 p-5 rounded-xl border border-gold-500/20 bg-gold-500/5 space-y-2">
+                <div className="flex justify-between items-center"><span className="text-stone-400">Total visita ({Number(form.people) || 0} × $15.000)</span><span className="text-sm font-semibold text-white">${total.toLocaleString('es-CO')} COP</span></div>
+                <div className="flex justify-between items-center"><span className="text-stone-400">Abono a pagar hoy ({Math.round(depositRate * 100)}%)</span><span className="text-sm font-semibold text-gold-300">${deposit.toLocaleString('es-CO')} COP</span></div>
+                <div className="pt-2 border-t border-white/10 flex justify-between items-center"><span className="text-stone-400">Saldo el día de la visita</span><span className="font-display font-bold text-white">${(total - deposit).toLocaleString('es-CO')} COP</span></div>
+              </div>
               <Button type="submit" size="lg" className="w-full mt-6"><Send className="w-4 h-4" />Continuar al pago</Button>
             </GlassCard></motion.form>
           )}

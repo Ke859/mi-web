@@ -8,7 +8,7 @@ export function Hero() {
   }
 
   return (
-    <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden">
+    <section id="hero" className="relative min-h-svh flex items-center justify-center overflow-hidden">
       {/* Background Video */}
       <div className="absolute inset-0">
         <video
@@ -46,7 +46,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
-          className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold text-white leading-[0.95] tracking-tight"
+          className="font-display text-[2.75rem] xs:text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold text-white leading-[0.95] tracking-tight"
         >
           <span className="text-shadow-glow">DARK</span>
           <span className="text-gradient-gold">BAT</span>
@@ -56,7 +56,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
-          className="mt-6 text-stone-400 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed"
+          className="mt-6 text-stone-400 text-sm xs:text-base md:text-xl max-w-2xl mx-auto leading-relaxed"
         >
           Explora una de las cuevas más fascinantes del mundo. Descubre formaciones milenarias y maravíllate con los murciélagos en su hábitat natural.
         </motion.p>

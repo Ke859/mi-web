@@ -27,6 +27,7 @@ export interface BookingFormData {
   date: string
   time: string
   people: string
+  lunch: string
   comments: string
 }
 
