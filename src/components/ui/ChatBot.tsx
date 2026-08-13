@@ -1,12 +1,26 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send } from 'lucide-react'
+import { X, Send, ImagePlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { compressImage } from '../../utils/image'
 
 interface Message {
   id: number
   text: string
   isUser: boolean
+  booking?: BookingPrefill | null
+  bookingDone?: boolean
+  image?: string | null
+}
+
+interface BookingPrefill {
+  date?: string
+  time?: string
+  people?: number
+  lunch?: 'yes' | 'no'
+  name?: string
+  whatsapp?: string
+  email?: string
 }
 
 const responses: Record<string, string> = {
@@ -16,10 +30,10 @@ const responses: Record<string, string> = {
 }
 
 const defaultAnswers = [
-  '¡Hola! 👋 Soy el asistente virtual de DARKBAT 🦇. Puedo ayudarte con horarios 🕐, precios 💰, ubicación 📍, verificar tu pago ✅ y consultar tus últimas reservas 📋. ¿En qué puedo ayudarte? 😊',
+  '¡Hola! 👋 Soy el asistente virtual de DARKBAT 🦇. Puedo ayudarte con horarios 🕐, precios 💰, ubicación 📍, verificar tu pago ✅ y consultar tus últimas reservas 📋. También puedes decirme algo como "quiero reservar el sábado con 8 personas" y te preparo el formulario. 😊',
 ]
 
-const suggestionChips = ['🦇 Verificar mi pago', '📋 Mis últimas 3 reservas', '⏰ Horarios', '💰 Precios', '📍 Ubicación']
+const suggestionChips = ['📅 Quiero reservar', '🦇 Verificar mi pago', '📋 Mis últimas 3 reservas', '⏰ Horarios', '💰 Precios', '📍 Ubicación']
 
 function getAnswer(input: string): string {
   const lower = input.toLowerCase()
@@ -38,6 +52,10 @@ export function ChatBot() {
   const [isTyping, setIsTyping] = useState(false)
   const [step, setStep] = useState<ChatStep>('idle')
   const [verifyName, setVerifyName] = useState('')
+  const [pendingBooking, setPendingBooking] = useState<BookingPrefill | null>(null)
+  const [lastBooking, setLastBooking] = useState<BookingPrefill | null>(null)
+  const [chatBookingId, setChatBookingId] = useState<string | null>(null)
+  const [chatDeposit, setChatDeposit] = useState<number | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
   const idRef = useRef(2)
 
@@ -45,11 +63,156 @@ export function ChatBot() {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
   }, [messages, isTyping])
 
-  const addBotMsg = useCallback(async (text: string, delay = 800) => {
+  const addBotMsg = useCallback(async (text: string, delay = 800, booking: BookingPrefill | null = null, bookingDone = false) => {
     await new Promise((r) => setTimeout(r, delay + Math.random() * 800))
-    setMessages((prev) => [...prev, { id: idRef.current++, text, isUser: false }])
+    setMessages((prev) => [...prev, { id: idRef.current++, text, isUser: false, booking, bookingDone }])
     setIsTyping(false)
   }, [])
+
+  const askAI = useCallback(async (text: string) => {
+    setIsTyping(true)
+    try {
+      const history = messages
+        .slice(-6)
+        .map((m) => ({ role: m.isUser ? 'user' : 'assistant', content: m.text }))
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, history }),
+      })
+      if (!resp.ok) throw new Error('AI error')
+      const data = await resp.json()
+      let booking: BookingPrefill | null = data.booking || null
+
+      const merged: BookingPrefill | null = booking ? { ...pendingBooking, ...booking } : null
+
+      const complete =
+        merged &&
+        merged.date && merged.time && merged.people &&
+        merged.name && merged.whatsapp && merged.email
+
+      if (complete) {
+        setPendingBooking(merged)
+        const fDate = merged.date as string
+        const fTime = merged.time as string
+        const fPeople = merged.people as number
+        const fName = merged.name as string
+        const fLunch = merged.lunch
+        const rate = fPeople <= 10 ? 0.1 : fPeople <= 20 ? 0.15 : fPeople <= 30 ? 0.2 : fPeople <= 40 ? 0.25 : 0.3
+        const bookResp = await fetch('/api/booking', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...merged, source: 'bot' }),
+        })
+        const bookData = await bookResp.json()
+        if (bookResp.ok) {
+          setLastBooking(merged)
+          setChatBookingId(bookData.id || null)
+          setChatDeposit(Math.round(fPeople * 15000 * rate))
+          await addBotMsg(
+            `✅ ¡Reserva registrada, ${fName}! 🦇\n\n📅 ${fDate} · ${fTime}\n👥 ${fPeople} personas${fLunch === 'yes' ? ' · 🍽️ con almuerzo' : ''}\n\n💰 Total: $${(fPeople * 15000).toLocaleString('es-CO')} COP\n💳 Abono: $${(Math.round(fPeople * 15000 * rate)).toLocaleString('es-CO')} COP por Nequi (314 459 5642)\n\n📷 Paga por Nequi y adjunta el comprobante aquí mismo: la IA lo verifica y tu cupo queda asegurado al instante.`,
+            0, null, true
+          )
+          setPendingBooking(null)
+          return
+        }
+        const alternatives = bookData.alternatives?.length
+          ? `\n\n🕓 *Horarios libres ese día:* ${bookData.alternatives.join(', ')}. ¿Te sirve alguno?`
+          : ''
+        await addBotMsg(`😢 No se pudo registrar: ${bookData.error || 'error desconocido'}.${alternatives}`, 0)
+        return
+      }
+
+      setPendingBooking(merged)
+      await addBotMsg(data.reply || '🤔 No pude procesar tu mensaje. Intenta de nuevo.', 0, booking)
+    } catch {
+      const answer = getAnswer(text)
+      await addBotMsg(answer, 0)
+    }
+  }, [addBotMsg, messages, pendingBooking])
+
+  const attachReceipt = useCallback(async (file: File | undefined) => {
+    if (!file) return
+    if (!chatBookingId) {
+      await addBotMsg('⚠️ Primero haz una reserva conmigo y luego adjunta el comprobante.', 0)
+      return
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      await addBotMsg('📷 Sube una imagen JPG, PNG o WEBP.', 0)
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      await addBotMsg('🖼️ La imagen no puede superar 10 MB.', 0)
+      return
+    }
+    setIsTyping(true)
+    try {
+      const compressed = await compressImage(file)
+      const extension = compressed.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const receiptPath = `pending/${crypto.randomUUID()}.${extension}`
+      const { error: uploadError } = await supabase.storage.from('comprobantes-db').upload(receiptPath, compressed, { contentType: compressed.type })
+      if (uploadError) throw new Error('upload')
+      const receiptUrl = supabase.storage.from('comprobantes-db').getPublicUrl(receiptPath).data.publicUrl
+      const { error: updateError } = await supabase.from('bookings').update({ receipt_path: receiptPath }).eq('id', chatBookingId)
+      if (updateError) throw new Error('update')
+      const resp = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiptUrl, expectedAmount: chatDeposit, visitDate: lastBooking?.date }),
+      })
+      const data = await resp.json()
+      if (resp.ok && data.coincide) {
+        await supabase.from('bookings').update({ payment_status: 'confirmed' }).eq('id', chatBookingId)
+        await addBotMsg('✅ *¡Pago verificado!* Tu comprobante coincide con el abono y tu reserva quedó *CONFIRMADA automáticamente*. 🦇 ¡Te esperamos!', 0)
+      } else if (resp.ok && data.es_comprobante === false) {
+        await addBotMsg(`❌ *Esa imagen no parece un comprobante de pago.* ${data.detalle || ''}\n\nAdjunta la captura real del pago de Nequi (o envíala por WhatsApp 👇). Tu reserva sigue guardada.`, 0)
+      } else if (resp.ok) {
+        await addBotMsg(`⚠️ La IA leyó tu comprobante pero *no coincide* con el abono esperado ($${chatDeposit?.toLocaleString('es-CO')} COP).\n\n${data.detalle || ''}\n\nSi pagaste otro valor o por otro medio, envíalo por WhatsApp para revisión manual: 💬👇`, 0)
+      } else {
+        await addBotMsg('😢 No pude analizar tu comprobante. Intenta de nuevo o envíalo por WhatsApp para revisión manual.', 0)
+      }
+    } catch {
+      await addBotMsg('😢 No pude subir tu comprobante. Intenta de nuevo o envíalo por WhatsApp.', 0)
+    }
+    setIsTyping(false)
+  }, [addBotMsg, chatBookingId, chatDeposit])
+
+  const describeImage = useCallback(async (file: File | undefined) => {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      await addBotMsg('📷 Sube una imagen JPG, PNG o WEBP.', 0)
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      await addBotMsg('🖼️ La imagen no puede superar 10 MB.', 0)
+      return
+    }
+    setIsTyping(true)
+    try {
+      const compressed = await compressImage(file)
+      const receiptPath = `tmp/${crypto.randomUUID()}.jpg`
+      const { error: uploadError } = await supabase.storage.from('comprobantes-db').upload(receiptPath, compressed, { contentType: 'image/jpeg' })
+      if (uploadError) throw new Error('upload')
+      const imageUrl = supabase.storage.from('comprobantes-db').getPublicUrl(receiptPath).data.publicUrl
+      setMessages((prev) => [...prev, { id: idRef.current++, text: '📷', isUser: true, image: imageUrl }])
+      const resp = await fetch('/api/describe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error('describe')
+      await addBotMsg(`🖼️ *Veo lo siguiente en la imagen:*\n\n${data.descripcion}`, 0)
+    } catch {
+      await addBotMsg('😢 No pude analizar la imagen. Intenta de nuevo.', 0)
+    }
+    setIsTyping(false)
+  }, [addBotMsg])
+
+  const prefillBooking = (booking: BookingPrefill) => {
+    window.dispatchEvent(new CustomEvent('darkbat:prefill-booking', { detail: booking }))
+    setIsOpen(false)
+  }
 
   const handlePaymentCheck = useCallback(async (name: string, whatsapp: string) => {
     setIsTyping(true)
@@ -135,12 +298,8 @@ export function ChatBot() {
       return
     }
 
-    // Normal responses
-    setIsTyping(true)
-    setTimeout(() => {
-      const answer = getAnswer(text)
-      addBotMsg(answer, 0)
-    }, 800 + Math.random() * 800)
+    // Any free-form message goes to the AI (local answers as fallback inside askAI)
+    askAI(text)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -224,6 +383,49 @@ export function ChatBot() {
                     }`}
                   >
                     {msg.text}
+                    {msg.image && (
+                      <img src={msg.image} alt="Imagen enviada" className="mt-2 rounded-lg max-h-40 object-cover border border-white/10" />
+                    )}
+                    {!msg.isUser && msg.bookingDone && (
+                      <div className="mt-3 space-y-2">
+                        <label className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gold-500 text-deep-950 text-xs font-semibold cursor-pointer hover:bg-gold-400 transition-all">
+                          📷 Adjuntar comprobante (verificación con IA)
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="sr-only"
+                            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; attachReceipt(f) }}
+                          />
+                        </label>
+                        <a
+                          href={`https://wa.me/3043899234?text=${encodeURIComponent(
+                            `🦇 *Nueva reserva desde el asistente*%0A%0A👤 *Nombre:* ${lastBooking?.name || '—'}%0A📧 *Correo:* ${lastBooking?.email || '—'}%0A📱 *WhatsApp:* ${lastBooking?.whatsapp || '—'}%0A📅 *Fecha:* ${lastBooking?.date || '—'}%0A⏰ *Hora:* ${lastBooking?.time || '—'}%0A👥 *Personas:* ${lastBooking?.people || '—'}%0A🍽️ *Almuerzo:* ${lastBooking?.lunch === 'yes' ? 'Sí' : lastBooking?.lunch === 'no' ? 'No' : '—'}%0A💰 *Total:* $${((lastBooking?.people || 0) * 15000).toLocaleString('es-CO')} COP%0A%0A⏳ Estado: Pendiente de pago%0A%0A📎 *Adjunta aquí tu comprobante de pago para confirmar.*`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#25D366] text-white text-xs font-semibold hover:bg-[#1fb958] transition-all"
+                        >
+                          💬 Enviar reserva y comprobante por WhatsApp
+                        </a>
+                      </div>
+                    )}
+                    {!msg.isUser && msg.booking && !msg.bookingDone && (
+                      <div className="mt-3">
+                        <div className="rounded-lg bg-gold-500/10 border border-gold-500/30 px-3 py-2 mb-2 text-xs text-gold-200 space-y-0.5">
+                          {msg.booking.date && <p>📅 Fecha: {msg.booking.date}</p>}
+                          {msg.booking.time && <p>⏰ Hora: {msg.booking.time}</p>}
+                          {msg.booking.people && <p>👥 Personas: {msg.booking.people}</p>}
+                          {msg.booking.lunch && <p>🍽️ {msg.booking.lunch === 'yes' ? 'Con almuerzo' : 'Sin almuerzo'}</p>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => msg.booking && prefillBooking(msg.booking)}
+                          className="w-full px-4 py-2.5 rounded-lg bg-gradient-to-r from-gold-500 to-gold-400 text-deep-950 text-xs font-semibold hover:from-gold-400 hover:to-gold-300 transition-all"
+                        >
+                          ✅ Ir a reservar con estos datos
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -261,12 +463,21 @@ export function ChatBot() {
             {/* Input */}
             <div className="px-4 pb-4 pt-1 border-t border-white/5">
               <div className="flex gap-2">
+                <label className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-stone-300 hover:text-gold-300 hover:border-gold-500/40 cursor-pointer transition-all shrink-0" title="Enviar imagen y describirla">
+                  <ImagePlus className="w-4 h-4" />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; describeImage(f) }}
+                  />
+                </label>
                 <input
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Escribe tu pregunta..."
+                  placeholder="Escribe tu pregunta o envía una foto..."
                   className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-stone-600 focus:outline-none focus:ring-2 focus:ring-gold-500/40 transition-all"
                 />
                 <button

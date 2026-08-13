@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { SectionTitle } from '../ui/SectionTitle'
 import { Lightbox } from '../ui/Lightbox'
+import { Parallax } from '../effects/Parallax'
 import { galleryImages } from '../../data/content'
 
 function GalleryImage({
@@ -77,6 +78,8 @@ export function Gallery() {
       transition={{ duration: 0.6, ease: 'easeOut' }}
       className="relative py-24 md:py-32 bg-deep-900/50"
     >
+      <Parallax speed={40} direction="x" className="absolute -left-16 top-32 w-64 h-64 rounded-full bg-gold-500/5 blur-3xl pointer-events-none" />
+      <Parallax speed={-50} direction="x" className="absolute -right-20 bottom-40 w-80 h-80 rounded-full bg-deep-700/30 blur-3xl pointer-events-none" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           animate={{ opacity: sectionInView ? 1 : 0, y: sectionInView ? 0 : 20 }}

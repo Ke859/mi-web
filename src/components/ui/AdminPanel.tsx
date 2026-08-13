@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Lock, LogOut, X, RefreshCw, Eye, Download, Users, CalendarDays, Clock, Wallet, Trash2, AlertTriangle } from 'lucide-react'
+import { Lock, LogOut, X, RefreshCw, Eye, Download, Users, CalendarDays, Clock, Wallet, Trash2, AlertTriangle, Check, ThumbsDown, ShieldCheck, Loader2, ScanSearch, ClipboardList } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 interface Booking {
@@ -14,6 +14,7 @@ interface Booking {
   lunch: string
   comments: string | null
   total_cop: number
+  deposit_cop?: number | null
   payment_status: string
   receipt_path: string
   created_at: string
@@ -22,11 +23,13 @@ interface Booking {
 const ADMIN_EMAIL = 'kevin001lbh@gmail.com'
 const ADMIN_PASSWORD = 'kevin001456'
 const statusMap: Record<string, { label: string; color: string }> = {
+  pending_payment: { label: 'Pendiente de pago', color: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
   pending_confirmation: { label: 'Pendiente', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
   approved: { label: 'Confirmado', color: 'bg-green-500/15 text-green-300 border-green-500/30' },
   confirmed: { label: 'Confirmado', color: 'bg-green-500/15 text-green-300 border-green-500/30' },
   rejected: { label: 'Rechazado', color: 'bg-red-500/15 text-red-300 border-red-500/30' },
   cancelled: { label: 'Cancelado', color: 'bg-red-500/15 text-red-300 border-red-500/30' },
+  completed: { label: 'Completada', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
 }
 
 export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -39,6 +42,10 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const [loadError, setLoadError] = useState('')
   const [showReceipts, setShowReceipts] = useState<Record<string, boolean>>({})
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState<string | null>(null)
+  const [verifyResult, setVerifyResult] = useState<Record<string, { monto: string; coincide: boolean; esComprobante: boolean; detalle: string }>>({})
+  const [describeResult, setDescribeResult] = useState<Record<string, { descripcion: string; loading: boolean }>>({})
+  const [sendingSummary, setSendingSummary] = useState(false)
 
   const loadBookings = useCallback(async () => {
     setLoading(true)
@@ -47,6 +54,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
       const { data, error } = await supabase
         .from('bookings')
         .select('*')
+        .not('payment_status', 'in', '(draft,awaiting_confirm)')
         .order('created_at', { ascending: false })
         .limit(200)
       if (error) throw error
@@ -82,7 +90,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
   const downloadReceipt = async (path: string, name: string) => {
     try {
-      const { data, error } = await supabase.storage.from('payment-receipts').download(path)
+      const { data, error } = await supabase.storage.from('comprobantes-db').download(path)
       if (error) throw error
       const url = URL.createObjectURL(data)
       const a = document.createElement('a')
@@ -99,7 +107,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     setLoadError('')
     try {
       if (booking.receipt_path) {
-        await supabase.storage.from('payment-receipts').remove([booking.receipt_path])
+        await supabase.storage.from('comprobantes-db').remove([booking.receipt_path])
       }
       const { error } = await supabase.from('bookings').delete().eq('id', booking.id)
       if (error) throw error
@@ -108,6 +116,68 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     } catch {
       setLoadError('No se pudo eliminar la reserva. Verifica la política RLS de borrado.')
     }
+  }
+
+  const setStatus = async (booking: Booking, status: string) => {
+    setLoadError('')
+    try {
+      const { error } = await supabase.from('bookings').update({ payment_status: status }).eq('id', booking.id)
+      if (error) throw error
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? { ...b, payment_status: status } : b)))
+    } catch {
+      setLoadError('No se pudo actualizar el estado. Verifica la política RLS de actualización.')
+    }
+  }
+
+  const verifyReceipt = async (booking: Booking) => {
+    setVerifying(booking.id)
+    setLoadError('')
+    try {
+      const receiptUrl = `https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/comprobantes-db/${booking.receipt_path}`
+      const resp = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiptUrl, expectedAmount: booking.deposit_cop, visitDate: booking.visit_date }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
+      setVerifyResult((prev) => ({ ...prev, [booking.id]: { monto: data.monto, coincide: data.coincide, esComprobante: data.es_comprobante, detalle: data.detalle } }))
+    } catch {
+      setVerifyResult((prev) => ({ ...prev, [booking.id]: { monto: '', coincide: false, esComprobante: false, detalle: 'No se pudo verificar. Intenta de nuevo.' } }))
+    }
+    setVerifying(null)
+  }
+
+  const describeReceipt = async (bookingId: string, receiptPath: string) => {
+    setDescribeResult((prev) => ({ ...prev, [bookingId]: { descripcion: '', loading: true } }))
+    setLoadError('')
+    try {
+      const imageUrl = `https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/comprobantes-db/${receiptPath}`
+      const resp = await fetch('/api/describe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
+      setDescribeResult((prev) => ({ ...prev, [bookingId]: { descripcion: data.descripcion, loading: false } }))
+    } catch {
+      setDescribeResult((prev) => ({ ...prev, [bookingId]: { descripcion: 'No se pudo analizar la imagen.', loading: false } }))
+    }
+  }
+
+  const sendDailySummary = async () => {
+    setSendingSummary(true)
+    setLoadError('')
+    try {
+      const resp = await fetch('/api/daily-summary', { method: 'POST' })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
+      setLoadError(`📨 Resumen de ${data.date} enviado a Telegram (${data.total} reservas).`)
+    } catch {
+      setLoadError('No se pudo enviar el resumen a Telegram.')
+    }
+    setSendingSummary(false)
   }
 
   return (
@@ -180,6 +250,9 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     <span className="text-white font-semibold">{bookings.length}</span> reservas
                   </div>
                   <div className="flex gap-2">
+                    <button onClick={sendDailySummary} disabled={sendingSummary} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/10 border border-teal-500/30 text-xs text-teal-300 hover:bg-teal-500/20 transition-all disabled:opacity-50">
+                      {sendingSummary ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />} Resumen del día a Telegram
+                    </button>
                     <button onClick={loadBookings} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-stone-300 hover:border-gold-500/40 hover:text-gold-300 transition-all">
                       <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Actualizar
                     </button>
@@ -199,7 +272,8 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                   <div className="space-y-3">
                     {bookings.map((booking) => {
                       const status = statusMap[booking.payment_status] || { label: booking.payment_status, color: 'bg-white/5 text-stone-300 border-white/10' }
-                      return (
+
+  return (
                         <div key={booking.id} className="rounded-xl border border-white/10 bg-white/[.03] p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
@@ -213,12 +287,61 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                             </div>
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            <button onClick={() => toggleReceipt(booking.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-stone-300 hover:border-gold-500/40 hover:text-gold-300 transition-all">
-                              <Eye className="w-3.5 h-3.5" /> {showReceipts[booking.id] ? 'Ocultar comprobante' : 'Ver comprobante'}
-                            </button>
-                            <button onClick={() => downloadReceipt(booking.receipt_path, booking.name)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-stone-300 hover:border-gold-500/40 hover:text-gold-300 transition-all">
-                              <Download className="w-3.5 h-3.5" /> Descargar comprobante
-                            </button>
+                            {booking.payment_status !== 'confirmed' && booking.payment_status !== 'approved' && booking.payment_status !== 'rejected' && booking.payment_status !== 'cancelled' && (
+                              <>
+                                <button onClick={() => setStatus(booking, 'confirmed')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-xs text-green-300 hover:bg-green-500/20 transition-all">
+                                  <Check className="w-3.5 h-3.5" /> Confirmar pago
+                                </button>
+                                <button onClick={() => setStatus(booking, 'rejected')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 hover:bg-red-500/20 transition-all">
+                                  <ThumbsDown className="w-3.5 h-3.5" /> Rechazar
+                                </button>
+                              </>
+                            )}
+                            {booking.receipt_path && (
+                              <>
+                                <button onClick={() => verifyReceipt(booking)} disabled={verifying === booking.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300 hover:bg-sky-500/20 transition-all">
+                                  {verifying === booking.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Verificar con IA
+                                </button>
+{(booking.payment_status === 'confirmed' || booking.payment_status === 'approved') && (
+                              <>
+                                <button onClick={() => setStatus(booking, 'completed')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 hover:bg-emerald-500/20 transition-all">
+                                  <Check className="w-3.5 h-3.5" /> Completar visita
+                                </button>
+                                <button onClick={() => setStatus(booking, 'cancelled')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 hover:bg-red-500/20 transition-all">
+                                  <ThumbsDown className="w-3.5 h-3.5" /> Cancelar
+                                </button>
+                              </>
+                            )}
+                            {booking.receipt_path && (
+                                  <button onClick={() => describeReceipt(booking.id, booking.receipt_path!)} disabled={describeResult[booking.id]?.loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-xs text-purple-300 hover:bg-purple-500/20 transition-all">
+                                    {describeResult[booking.id]?.loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />} ¿Qué muestra la imagen?
+                                  </button>
+                                )}
+                                <button onClick={() => toggleReceipt(booking.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-stone-300 hover:border-gold-500/40 hover:text-gold-300 transition-all">
+                                  <Eye className="w-3.5 h-3.5" /> {showReceipts[booking.id] ? 'Ocultar comprobante' : 'Ver comprobante'}
+                                </button>
+                                <button onClick={() => downloadReceipt(booking.receipt_path, booking.name)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-stone-300 hover:border-gold-500/40 hover:text-gold-300 transition-all">
+                                  <Download className="w-3.5 h-3.5" /> Descargar comprobante
+                                </button>
+                              </>
+                            )}
+                            {describeResult[booking.id]?.descripcion && (
+                              <div className="w-full rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2 text-xs text-purple-200">
+                                <p className="font-semibold mb-0.5">🖼️ Contenido de la imagen</p>
+                                <p className="opacity-90">{describeResult[booking.id].descripcion}</p>
+                              </div>
+                            )}
+                            {verifyResult[booking.id] && (
+                              <div className={`w-full rounded-lg border px-3 py-2 text-xs ${
+                                verifyResult[booking.id].coincide ? 'border-green-500/40 bg-green-500/10 text-green-300'
+                                : !verifyResult[booking.id].esComprobante ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                                : 'border-red-500/40 bg-red-500/10 text-red-300'
+                              }`}>
+                                <p className="font-semibold">{verifyResult[booking.id].coincide ? '✅ Monto coincide' : !verifyResult[booking.id].esComprobante ? '❌ No es un comprobante de pago' : '⚠️ No coincide'}</p>
+                                {verifyResult[booking.id].esComprobante && <p className="mt-0.5">Pagado: {verifyResult[booking.id].monto ? `$${verifyResult[booking.id].monto} COP` : 'no leído'} · Esperado: ${booking.deposit_cop?.toLocaleString('es-CO') || '—'} COP</p>}
+                                <p className="mt-0.5 opacity-80">{verifyResult[booking.id].detalle}</p>
+                              </div>
+                            )}
                             {confirmDelete === booking.id ? (
                               <span className="inline-flex items-center gap-2 ml-auto">
                                 <button onClick={() => deleteBooking(booking)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/50 text-xs text-red-300 hover:bg-red-500/30 transition-all">
@@ -239,7 +362,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                                 <div className="mt-3 flex justify-center rounded-lg bg-deep-950/60 border border-white/10 p-4">
                                   <img
-                                    src={`https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/payment-receipts/${booking.receipt_path}`}
+                                    src={`https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/comprobantes-db/${booking.receipt_path}`}
                                     alt="Comprobante"
                                     className="max-h-64 rounded-lg object-contain"
                                   />

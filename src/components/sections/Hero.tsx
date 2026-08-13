@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { ArrowDown, Play } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { Parallax } from '../effects/Parallax'
 
 export function Hero() {
   const scrollTo = (id: string) => {
@@ -10,20 +11,20 @@ export function Hero() {
   return (
     <section id="hero" className="relative min-h-svh flex items-center justify-center overflow-hidden">
       {/* Background Video */}
-      <div className="absolute inset-0">
+      <Parallax speed={120} className="absolute inset-0">
         <video
           autoPlay
           muted
           loop
           playsInline
           poster="/hero-bg.png"
-          className="w-full h-full object-cover"
+          className="w-full h-[120%] object-cover"
         >
           <source src="/hero-video.mp4" type="video/mp4" />
         </video>
-        <div className="absolute inset-0 bg-gradient-to-b from-deep-950/80 via-deep-950/60 to-deep-950" />
-        <div className="absolute inset-0 bg-gradient-to-r from-deep-950/40 to-transparent" />
-      </div>
+      </Parallax>
+      <div className="absolute inset-0 bg-gradient-to-b from-deep-950/80 via-deep-950/60 to-deep-950" />
+      <div className="absolute inset-0 bg-gradient-to-r from-deep-950/40 to-transparent" />
 
       {/* Overlay gradient vignette */}
       <div className="absolute inset-0 bg-gradient-to-t from-deep-950 via-transparent to-deep-950/30" />

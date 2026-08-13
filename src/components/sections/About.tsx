@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { SectionTitle } from '../ui/SectionTitle'
 import { Sparkles, Mountain, Eye } from 'lucide-react'
+import { Parallax } from '../effects/Parallax'
 
 const highlights = [
   {
@@ -32,24 +33,26 @@ export function About() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mt-8">
           {/* Image */}
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="relative"
-          >
-            <div className="aspect-[4/5] rounded-2xl overflow-hidden">
-              <img
-                src="https://images.unsplash.com/photo-1582642010675-8f3c0b5fe6e0?w=800&q=80"
-                alt="Guía iluminando formaciones rocosas en la cueva"
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            {/* Decorative gradient */}
-            <div className="absolute -inset-2 rounded-2xl bg-gradient-to-r from-gold-500/10 to-transparent -z-10" />
-          </motion.div>
+          <Parallax speed={60}>
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: 'easeOut' }}
+              className="relative"
+            >
+              <div className="aspect-[4/5] rounded-2xl overflow-hidden">
+                <img
+                  src="https://images.unsplash.com/photo-1582642010675-8f3c0b5fe6e0?w=800&q=80"
+                  alt="Guía iluminando formaciones rocosas en la cueva"
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              {/* Decorative gradient */}
+              <div className="absolute -inset-2 rounded-2xl bg-gradient-to-r from-gold-500/10 to-transparent -z-10" />
+            </motion.div>
+          </Parallax>
 
           {/* Content */}
           <motion.div

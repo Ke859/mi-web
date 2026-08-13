@@ -38,7 +38,7 @@ export const faqData: FAQItem[] = [
 ]
 
 export const contactInfo = {
-  email: 'darkbatoficial@gmail.com',
+  email: 'Oficialdarkbat@gmail.com',
   phone: '3043899234',
   whatsapp: '3043899234',
   address: 'Santa Sofía, Colombia',

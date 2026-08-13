@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ParticleBackground } from './components/effects/ParticleBackground'
 import { Bats } from './components/effects/Bats'
 import { LightEffect } from './components/effects/LightEffect'
+import { ScrollProgress } from './components/effects/ScrollProgress'
 import { Navbar } from './components/layout/Navbar'
 import { Footer } from './components/layout/Footer'
 import { Hero } from './components/sections/Hero'
@@ -34,6 +35,7 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen bg-deep-950 text-stone-300">
+      <ScrollProgress />
       <ParticleBackground />
       <Bats />
       <LightEffect />

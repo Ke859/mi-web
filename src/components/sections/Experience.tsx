@@ -2,13 +2,15 @@ import { motion } from 'framer-motion'
 import { Clock, Map, Users, Shirt, Signal, Backpack } from 'lucide-react'
 import { SectionTitle } from '../ui/SectionTitle'
 import { GlassCard } from '../ui/GlassCard'
+import { Parallax } from '../effects/Parallax'
 import { experienceDetails } from '../../data/content'
 
 const iconMap: Record<string, React.ComponentType<any>> = { Clock, Map, Users, Shirt, Signal, Backpack }
 
 export function Experience() {
   return (
-    <section id="experience" className="relative py-24 md:py-32">
+    <section id="experience" className="relative py-24 md:py-32 overflow-hidden">
+      <Parallax speed={50} className="absolute -left-20 top-1/4 w-72 h-72 rounded-full bg-gold-500/5 blur-3xl pointer-events-none" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionTitle
           subtitle="El Recorrido"
