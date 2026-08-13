@@ -12,10 +12,10 @@ drop policy if exists "anon_insert_bookings" on public.bookings;
 drop policy if exists "anon_select_bookings" on public.bookings;
 drop policy if exists "service_full_bookings" on public.bookings;
 
--- 3) bookings: el público (anon) SOLO puede crear reservas
-create policy "anon_insert_bookings" on public.bookings
-  for insert to anon
-  with check (true);
+-- 3) bookings: SIN acceso anónimo. Todas las operaciones (SELECT/INSERT/
+--    UPDATE/DELETE) las hacen las Cloudflare Functions con la service role
+--    key, que ignora RLS. Cualquier llamada directa desde el navegador
+--    con la publishable key será rechazada.
 
 -- 4) wa_contacts: sin acceso público (solo service role / backend)
 
@@ -25,9 +25,10 @@ create policy "public_read_comprobantes" on storage.objects
   for select to anon
   using (bucket_id = 'comprobantes-db');
 
--- NOTA: todas las demás operaciones (SELECT/UPDATE/DELETE de reservas,
--- subida de comprobantes) las hacen las Cloudflare Functions con la
--- service role key, que ignora RLS.
+-- NOTA: todas las operaciones (SELECT/INSERT/UPDATE/DELETE de reservas,
+-- subida/borrado de comprobantes) las hacen las Cloudflare Functions con la
+-- service role key, que ignora RLS. Sin esa key, el sitio deja de funcionar
+-- a propósito (fail closed).
 
 -- Verificar:
 -- select tablename, rowsecurity from pg_tables where schemaname='public' and tablename in ('bookings','wa_contacts');
