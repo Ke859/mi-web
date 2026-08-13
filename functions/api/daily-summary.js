@@ -14,9 +14,10 @@ async function handle({ request, env }) {
     }
 
     const today = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10)
+    const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_PUBLISHABLE_KEY
     const headers = {
-      apikey: env.SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_PUBLISHABLE_KEY}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
     }
 
     const res = await fetch(

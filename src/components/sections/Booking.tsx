@@ -4,10 +4,20 @@ import { AlertCircle, AlertTriangle, ArrowLeft, Calendar, CheckCircle, Clock, Co
 import { SectionTitle } from '../ui/SectionTitle'
 import { GlassCard } from '../ui/GlassCard'
 import { Button } from '../ui/Button'
-import { supabase } from '../../lib/supabase'
 import { compressImage } from '../../utils/image'
 import { contactInfo } from '../../data/content'
 import type { BookingFormData } from '../../types'
+
+const fileToBase64 = (file: File | Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      resolve(result.replace(/^data:.*?base64,/, ''))
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 
 const initialForm: BookingFormData = { name: '', email: '', whatsapp: '', date: '', time: '', people: '5', lunch: '', comments: '' }
 const fieldClass = 'w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder:text-stone-600 focus:outline-none focus:ring-2 focus:ring-gold-500/40 transition-all'
@@ -100,14 +110,19 @@ export function Booking() {
     }
     setIsSubmitting(true)
     setSubmitError('')
-    const extension = receipt.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const receiptPath = `pending/${crypto.randomUUID()}.${extension}`
-    const { error: uploadError } = await supabase.storage.from('comprobantes-db').upload(receiptPath, receipt, { contentType: receipt.type })
-    if (uploadError) {
+    const base64 = await fileToBase64(receipt)
+    const up = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64, contentType: receipt.type, folder: 'pending' }),
+    })
+    const upData = await up.json()
+    if (!up.ok) {
       setSubmitError('No pudimos subir el comprobante. Inténtalo de nuevo.')
       setIsSubmitting(false)
       return
     }
+    const receiptPath = upData.receipt_path
     const resp = await fetch('/api/booking', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -119,7 +134,11 @@ export function Booking() {
     })
     const data = await resp.json()
     if (!resp.ok) {
-      await supabase.storage.from('comprobantes-db').remove([receiptPath])
+      await fetch('/api/upload', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: receiptPath }),
+      })
       const alternatives = data.alternatives?.length ? ` Horarios libres: ${data.alternatives.join(', ')}.` : ''
       setSubmitError(`${data.error || 'No pudimos registrar tu reserva. Inténtalo de nuevo.'}${alternatives}`)
       setIsSubmitting(false)
@@ -127,24 +146,24 @@ export function Booking() {
     }
     const bookingId = data.id
     setIsSubmitting(false)
+
     setStep('success')
-    if (bookingId) autoVerifyReceipt(bookingId, receiptPath)
+    if (bookingId) autoVerifyReceipt(bookingId, receipt)
     notifyAdmin()
   }
 
-  const autoVerifyReceipt = async (bookingId: string, receiptPath: string) => {
+  const autoVerifyReceipt = async (bookingId: string, receiptFile: File) => {
     setVerifyingAI(true)
     setVerificationMsg('')
     try {
-      const receiptUrl = supabase.storage.from('comprobantes-db').getPublicUrl(receiptPath).data.publicUrl
-      const resp = await fetch('/api/verify', {
+      const base64 = await fileToBase64(receiptFile)
+      const resp = await fetch('/api/attach-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiptUrl, expectedAmount: deposit, visitDate: form.date }),
+        body: JSON.stringify({ bookingId, base64, contentType: receiptFile.type, expectedAmount: deposit, visitDate: form.date }),
       })
       const data = await resp.json()
       if (resp.ok && data.coincide) {
-        await supabase.from('bookings').update({ payment_status: 'confirmed' }).eq('id', bookingId)
         setAutoVerified(true)
       } else if (resp.ok) {
         setVerificationMsg(data.detalle || 'El comprobante no coincide con el abono esperado.')
@@ -154,7 +173,6 @@ export function Booking() {
     }
     setVerifyingAI(false)
   }
-
   const notifyAdmin = () => {
     const msg = `🦇 *Nueva reserva DARKBAT*%0A%0A👤 *Nombre:* ${form.name}%0A📧 *Correo:* ${form.email}%0A📱 *WhatsApp:* ${form.whatsapp}%0A📅 *Fecha:* ${form.date}%0A⏰ *Hora:* ${form.time}%0A👥 *Personas:* ${form.people}%0A🍽️ *Almuerzo:* ${form.lunch === 'yes' ? 'Sí' : 'No'}%0A💰 *Total:* $${total.toLocaleString('es-CO')} COP%0A💳 *Abono (${Math.round(depositRate * 100)}%):* $${deposit.toLocaleString('es-CO')} COP%0A📝 *Comentarios:* ${form.comments || 'Ninguno'}%0A%0A⏳ Estado: Pendiente de confirmación%0A%0A📎 *Adjunta tu comprobante de pago a este chat para confirmar.*`
     window.open(`https://wa.me/${contactInfo.whatsapp}?text=${msg}`, '_blank')

@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Lock, LogOut, X, RefreshCw, Eye, Download, Users, CalendarDays, Clock, Wallet, Trash2, AlertTriangle, Check, ThumbsDown, ShieldCheck, Loader2, ScanSearch, ClipboardList } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 
 interface Booking {
   id: string
@@ -20,8 +19,6 @@ interface Booking {
   created_at: string
 }
 
-const ADMIN_EMAIL = 'kevin001lbh@gmail.com'
-const ADMIN_PASSWORD = 'kevin001456'
 const statusMap: Record<string, { label: string; color: string }> = {
   pending_payment: { label: 'Pendiente de pago', color: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
   pending_confirmation: { label: 'Pendiente', color: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
@@ -47,17 +44,19 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const [describeResult, setDescribeResult] = useState<Record<string, { descripcion: string; loading: boolean }>>({})
   const [sendingSummary, setSendingSummary] = useState(false)
 
+  const adminHeaders = () => ({ 'Content-Type': 'application/json', 'x-admin-password': sessionStorage.getItem('darkbat_admin') || '' })
+
   const loadBookings = useCallback(async () => {
     setLoading(true)
     setLoadError('')
     try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
-        .not('payment_status', 'in', '(draft,awaiting_confirm)')
-        .order('created_at', { ascending: false })
-        .limit(200)
-      if (error) throw error
+      const resp = await fetch('/api/admin/bookings', { headers: adminHeaders() })
+      if (resp.status === 401) {
+        setIsAuthed(false)
+        throw new Error('Sesión expirada')
+      }
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
       setBookings(data || [])
     } catch {
       setLoadError('No se pudieron cargar las reservas. Verifica la política RLS de lectura.')
@@ -68,15 +67,24 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError('')
-    if (email.trim().toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    try {
+      const resp = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
+      sessionStorage.setItem('darkbat_admin', password)
       setIsAuthed(true)
       loadBookings()
-    } else {
+    } catch {
       setLoginError('Credenciales incorrectas.')
     }
   }
 
   const handleLogout = () => {
+    sessionStorage.removeItem('darkbat_admin')
     setIsAuthed(false)
     setBookings([])
     setEmail('')
@@ -90,9 +98,10 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
   const downloadReceipt = async (path: string, name: string) => {
     try {
-      const { data, error } = await supabase.storage.from('comprobantes-db').download(path)
-      if (error) throw error
-      const url = URL.createObjectURL(data)
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/comprobantes-db/${path}`)
+      if (!resp.ok) throw new Error('download')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `${name.replace(/\s+/g, '_')}_comprobante.jpg`
@@ -106,11 +115,13 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const deleteBooking = async (booking: Booking) => {
     setLoadError('')
     try {
-      if (booking.receipt_path) {
-        await supabase.storage.from('comprobantes-db').remove([booking.receipt_path])
-      }
-      const { error } = await supabase.from('bookings').delete().eq('id', booking.id)
-      if (error) throw error
+      const resp = await fetch('/api/admin/delete', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ id: booking.id }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
       setBookings((prev) => prev.filter((b) => b.id !== booking.id))
       setConfirmDelete(null)
     } catch {
@@ -121,8 +132,13 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const setStatus = async (booking: Booking, status: string) => {
     setLoadError('')
     try {
-      const { error } = await supabase.from('bookings').update({ payment_status: status }).eq('id', booking.id)
-      if (error) throw error
+      const resp = await fetch('/api/admin/status', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ id: booking.id, status }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
       setBookings((prev) => prev.map((b) => (b.id === booking.id ? { ...b, payment_status: status } : b)))
     } catch {
       setLoadError('No se pudo actualizar el estado. Verifica la política RLS de actualización.')
@@ -133,7 +149,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     setVerifying(booking.id)
     setLoadError('')
     try {
-      const receiptUrl = `https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/comprobantes-db/${booking.receipt_path}`
+      const receiptUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/comprobantes-db/${booking.receipt_path}`
       const resp = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,7 +168,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     setDescribeResult((prev) => ({ ...prev, [bookingId]: { descripcion: '', loading: true } }))
     setLoadError('')
     try {
-      const imageUrl = `https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/comprobantes-db/${receiptPath}`
+      const imageUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/comprobantes-db/${receiptPath}`
       const resp = await fetch('/api/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -362,7 +378,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                                 <div className="mt-3 flex justify-center rounded-lg bg-deep-950/60 border border-white/10 p-4">
                                   <img
-                                    src={`https://okhianmifspbwuauxyfe.supabase.co/storage/v1/object/public/comprobantes-db/${booking.receipt_path}`}
+                                    src={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/comprobantes-db/${booking.receipt_path}`}
                                     alt="Comprobante"
                                     className="max-h-64 rounded-lg object-contain"
                                   />

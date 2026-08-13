@@ -108,9 +108,10 @@ function addDaysIso(iso, n) {
 async function getAvailability(env, fromDate, days) {
   try {
     const toDate = addDaysIso(fromDate, days - 1)
+    const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_PUBLISHABLE_KEY
     const headers = {
-      apikey: env.SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_PUBLISHABLE_KEY}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
     }
     const url = `${env.SUPABASE_URL}/rest/v1/bookings?select=visit_date,visit_time,people&visit_date=gte.${fromDate}&visit_date=lte.${toDate}&payment_status=neq.rejected&payment_status=neq.cancelled&payment_status=neq.draft&payment_status=neq.awaiting_confirm`
     const res = await fetch(url, { headers })

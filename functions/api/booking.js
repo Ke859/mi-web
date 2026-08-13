@@ -106,10 +106,7 @@ const SLOT_CAPACITY = 50
 
 async function checkCapacity(env, date, time, people) {
   try {
-    const headers = {
-      apikey: env.SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_PUBLISHABLE_KEY}`,
-    }
+    const headers = sbHeaders(env)
     const url = `${env.SUPABASE_URL}/rest/v1/bookings?select=visit_time,people&visit_date=eq.${date}&payment_status=neq.rejected&payment_status=neq.cancelled&payment_status=neq.draft&payment_status=neq.awaiting_confirm`
     const res = await fetch(url, { headers })
     if (!res.ok) return { conflict: false }
@@ -134,12 +131,7 @@ async function checkCapacity(env, date, time, people) {
 async function supabaseRequest(env, booking) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/bookings`, {
     method: 'POST',
-    headers: {
-      apikey: env.SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_PUBLISHABLE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    },
+    headers: { ...sbHeaders(env), 'Content-Type': 'application/json', Prefer: 'return=representation' },
     body: JSON.stringify(booking),
   })
   if (res.ok) return { error: null, data: await res.json() }
@@ -151,4 +143,9 @@ async function supabaseRequest(env, booking) {
     error = text
   }
   return { error }
+}
+
+function sbHeaders(env) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_PUBLISHABLE_KEY
+  return { apikey: key, Authorization: `Bearer ${key}` }
 }

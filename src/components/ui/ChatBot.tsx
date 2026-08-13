@@ -1,8 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, ImagePlus } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { compressImage } from '../../utils/image'
+
+const fileToBase64 = (file: File | Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result || '')
+      resolve(result.replace(/^data:.*?base64,/, ''))
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 
 interface Message {
   id: number
@@ -148,34 +158,27 @@ export function ChatBot() {
     setIsTyping(true)
     try {
       const compressed = await compressImage(file)
-      const extension = compressed.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const receiptPath = `pending/${crypto.randomUUID()}.${extension}`
-      const { error: uploadError } = await supabase.storage.from('comprobantes-db').upload(receiptPath, compressed, { contentType: compressed.type })
-      if (uploadError) throw new Error('upload')
-      const receiptUrl = supabase.storage.from('comprobantes-db').getPublicUrl(receiptPath).data.publicUrl
-      const { error: updateError } = await supabase.from('bookings').update({ receipt_path: receiptPath }).eq('id', chatBookingId)
-      if (updateError) throw new Error('update')
-      const resp = await fetch('/api/verify', {
+      const base64 = await fileToBase64(compressed)
+      const resp = await fetch('/api/attach-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiptUrl, expectedAmount: chatDeposit, visitDate: lastBooking?.date }),
+        body: JSON.stringify({ bookingId: chatBookingId, base64, contentType: compressed.type, expectedAmount: chatDeposit, visitDate: lastBooking?.date }),
       })
       const data = await resp.json()
       if (resp.ok && data.coincide) {
-        await supabase.from('bookings').update({ payment_status: 'confirmed' }).eq('id', chatBookingId)
         await addBotMsg('✅ *¡Pago verificado!* Tu comprobante coincide con el abono y tu reserva quedó *CONFIRMADA automáticamente*. 🦇 ¡Te esperamos!', 0)
       } else if (resp.ok && data.es_comprobante === false) {
         await addBotMsg(`❌ *Esa imagen no parece un comprobante de pago.* ${data.detalle || ''}\n\nAdjunta la captura real del pago de Nequi (o envíala por WhatsApp 👇). Tu reserva sigue guardada.`, 0)
       } else if (resp.ok) {
         await addBotMsg(`⚠️ La IA leyó tu comprobante pero *no coincide* con el abono esperado ($${chatDeposit?.toLocaleString('es-CO')} COP).\n\n${data.detalle || ''}\n\nSi pagaste otro valor o por otro medio, envíalo por WhatsApp para revisión manual: 💬👇`, 0)
       } else {
-        await addBotMsg('😢 No pude analizar tu comprobante. Intenta de nuevo o envíalo por WhatsApp para revisión manual.', 0)
+        await addBotMsg(`😢 ${data.error || 'No pude analizar tu comprobante.'} Intenta de nuevo o envíalo por WhatsApp para revisión manual.`, 0)
       }
     } catch {
       await addBotMsg('😢 No pude subir tu comprobante. Intenta de nuevo o envíalo por WhatsApp.', 0)
     }
     setIsTyping(false)
-  }, [addBotMsg, chatBookingId, chatDeposit])
+  }, [addBotMsg, chatBookingId, chatDeposit, lastBooking])
 
   const describeImage = useCallback(async (file: File | undefined) => {
     if (!file) return
@@ -190,10 +193,15 @@ export function ChatBot() {
     setIsTyping(true)
     try {
       const compressed = await compressImage(file)
-      const receiptPath = `tmp/${crypto.randomUUID()}.jpg`
-      const { error: uploadError } = await supabase.storage.from('comprobantes-db').upload(receiptPath, compressed, { contentType: 'image/jpeg' })
-      if (uploadError) throw new Error('upload')
-      const imageUrl = supabase.storage.from('comprobantes-db').getPublicUrl(receiptPath).data.publicUrl
+      const base64 = await fileToBase64(compressed)
+      const up = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64, contentType: compressed.type, folder: 'tmp' }),
+      })
+      const upData = await up.json()
+      if (!up.ok) throw new Error('upload')
+      const imageUrl = upData.receipt_url
       setMessages((prev) => [...prev, { id: idRef.current++, text: '📷', isUser: true, image: imageUrl }])
       const resp = await fetch('/api/describe', {
         method: 'POST',
@@ -218,16 +226,25 @@ export function ChatBot() {
     setIsTyping(true)
     try {
       const cleanNumber = whatsapp.replace(/[\s\-()]/g, '')
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('payment_status, total_cop, visit_date, visit_time, people, lunch, whatsapp, created_at')
-        .eq('name', name.trim())
-        .order('created_at', { ascending: false })
-        .limit(3)
+      const resp = await fetch('/api/check-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, whatsapp }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data.error || 'Error')
 
-      if (error) throw error
-
-      const filtered = (data || []).filter((booking) => booking.whatsapp === undefined || booking.whatsapp?.replace(/[\s\-()]/g, '') === cleanNumber)
+      type CheckedBooking = {
+        whatsapp?: string
+        payment_status?: string
+        lunch?: 'yes' | 'no'
+        visit_date?: string
+        visit_time?: string
+        people?: number
+        total_cop?: number
+      }
+      const bookings = (data.bookings || []) as CheckedBooking[]
+      const filtered = bookings.filter((booking) => booking.whatsapp === undefined || booking.whatsapp?.replace(/[\s\-()]/g, '') === cleanNumber)
 
       if (filtered.length === 0) {
         await addBotMsg(`😢 No se encontraron resultados para el nombre "${name.trim()}" y el número de celular ${whatsapp.trim()}. Verifica que sean los mismos con los que hiciste la reserva. 🤔`)
@@ -239,7 +256,7 @@ export function ChatBot() {
           cancelled: '❌ Cancelado',
         }
         const lines = filtered.map((booking, index) => {
-          const status = statusMap[booking.payment_status] || booking.payment_status
+          const status = statusMap[booking.payment_status || ''] || booking.payment_status || 'Registrada'
           const lunch = booking.lunch === 'yes' ? '🍽️ Con almuerzo' : 'Sin almuerzo'
           return `${index + 1}. 📅 ${booking.visit_date} ⏰ ${booking.visit_time} · 👥 ${booking.people} pers · ${lunch}\n   💰 $${booking.total_cop?.toLocaleString('es-CO')} COP · ${status}`
         })

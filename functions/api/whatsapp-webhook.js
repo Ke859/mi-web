@@ -73,9 +73,10 @@ export async function onRequestPost(context) {
 }
 
 async function supabaseHeaders(env) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_PUBLISHABLE_KEY
   return {
-    apikey: env.SUPABASE_PUBLISHABLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_PUBLISHABLE_KEY}`,
+    apikey: key,
+    Authorization: `Bearer ${key}`,
   }
 }
 
