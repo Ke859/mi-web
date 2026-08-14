@@ -1,4 +1,4 @@
-﻿const SLOT_TIMES = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
+const SLOT_TIMES = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
 const SLOT_CAPACITY = 50
 const ACTIVE_STATUS = 'payment_status=neq.rejected&payment_status=neq.cancelled&payment_status=neq.draft&payment_status=neq.awaiting_confirm&payment_status=neq.completed'
 const DRAFT_STATUS = 'payment_status=in.(draft,awaiting_confirm)'
@@ -62,7 +62,7 @@ export async function onRequestPost(context) {
     } else if (text) {
       await processText(env, from, text)
     } else {
-      await sendWhatsApp(env, from, 'ðŸ™ Solo puedo leer mensajes de texto e imÃ¡genes. Intenta otra vez.')
+      await sendWhatsApp(env, from, '🙏 Solo puedo leer mensajes de texto e imágenes. Intenta otra vez.')
     }
 
     return Response.json({ ok: true })
@@ -92,7 +92,7 @@ function bogotaHour() {
 function outOfHoursNotice() {
   const hour = bogotaHour()
   if (hour >= 8 && hour < 17) return ''
-  return `\n\nðŸ¦‡ Gracias por comunicarte con DARKBAT.\n\nEn este momento estamos fuera de nuestro horario de atenciÃ³n.\n\nðŸ• Nuestro horario es todos los dÃ­as de 8:00 a. m. a 5:00 p. m.\n\nPuedes dejarnos tu mensaje y te atenderemos dentro de nuestro horario. ðŸ˜Š`
+  return `\n\n🦇 Gracias por comunicarte con DARKBAT.\n\nEn este momento estamos fuera de nuestro horario de atención.\n\n🕐 Nuestro horario es todos los días de 8:00 a. m. a 5:00 p. m.\n\nPuedes dejarnos tu mensaje y te atenderemos dentro de nuestro horario. 😊`
 }
 
 async function getAvailability(env) {
@@ -112,7 +112,7 @@ async function getAvailability(env) {
   for (let i = 0; i < 7; i++) {
     const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date(Date.now() + i * 86400000))
     const free = SLOT_TIMES.filter((t) => (usage[`${d}|${t}`] || 0) < SLOT_CAPACITY)
-    days.push(`${d}: ${free.length ? free.join(', ') : 'DÃA COMPLETO'}`)
+    days.push(`${d}: ${free.length ? free.join(', ') : 'DÍA COMPLETO'}`)
   }
   return { days, usage }
 }
@@ -147,11 +147,11 @@ function parseFields(text, dates) {
 
   const low = t.toLowerCase()
   let relIdx = -1
-  if (/pasado\s+ma[nÃ±]ana/.test(low)) relIdx = 2
-  else if (/ma[nÃ±]ana/.test(low)) relIdx = 1
+  if (/pasado\s+ma[nñ]ana/.test(low)) relIdx = 2
+  else if (/ma[nñ]ana/.test(low)) relIdx = 1
   else if (/\bhoy\b/.test(low)) relIdx = 0
   else {
-    const wdNames = ['lunes', 'martes', 'miÃ©rcoles', 'jueves', 'viernes', 'sÃ¡bado', 'domingo']
+    const wdNames = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
     const target = wdNames.findIndex((w) => new RegExp(`(^|\\s|,|el\\s+)${w}\\b`).test(low))
     if (target >= 0) {
       for (let i = 0; i < dates.length; i++) {
@@ -180,12 +180,12 @@ function parseFields(text, dates) {
 async function extractFields(env, text, daysText, dates) {
   const labels = dates.map((d, i) => {
     if (i === 0) return 'hoy'
-    if (i === 1) return 'maÃ±ana'
-    if (i === 2) return 'pasado maÃ±ana'
+    if (i === 1) return 'mañana'
+    if (i === 2) return 'pasado mañana'
     return new Date(`${d}T12:00:00Z`).toLocaleDateString('es-CO', { weekday: 'long', timeZone: 'UTC' })
   })
   const dateList = dates.map((d, i) => `${labels[i]}=${d}`).join(', ')
-  const prompt = `Extrae del mensaje del cliente en JSON puro (sin texto adicional): nombre, email (x@y), personas (entero 5-50), hora (HH:MM), fecha (YYYY-MM-DD) y almuerzo (true/false, null si no lo menciona). Si menciona un dÃ­a relativo usa: ${dateList}. Mensaje: "${text}" JSON: {"nombre": null, "email": null, "personas": null, "hora": null, "fecha": null, "almuerzo": null}`
+  const prompt = `Extrae del mensaje del cliente en JSON puro (sin texto adicional): nombre, email (x@y), personas (entero 5-50), hora (HH:MM), fecha (YYYY-MM-DD) y almuerzo (true/false, null si no lo menciona). Si menciona un día relativo usa: ${dateList}. Mensaje: "${text}" JSON: {"nombre": null, "email": null, "personas": null, "hora": null, "fecha": null, "almuerzo": null}`
   const ai = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.NVIDIA_API_KEY}` },
@@ -256,14 +256,14 @@ async function sendInteractiveMenu(env, to) {
     type: 'interactive',
     interactive: {
       type: 'button',
-      header: { type: 'text', text: 'ðŸ¦‡ Â¡Hola! Bienvenido a DARKBAT.' },
-      body: { text: 'Â¿En quÃ© podemos ayudarte? Toca una opciÃ³n ðŸ‘‡\n\nTambiÃ©n puedes escribir: 1 InformaciÃ³n Â· 2 Reservar Â· 3 Precio Â· 4 UbicaciÃ³n' },
-      footer: { text: 'DARKBAT Â· Visita guiada a cueva natural Â· Santa SofÃ­a ðŸ•³ï¸' },
+      header: { type: 'text', text: '🦇 ¡Hola! Bienvenido a DARKBAT.' },
+      body: { text: '¿En qué podemos ayudarte? Toca una opción 👇\n\nTambién puedes escribir: 1 Información · 2 Reservar · 3 Precio · 4 Ubicación' },
+      footer: { text: 'DARKBAT · Visita guiada a cueva natural · Santa Sofía 🕳️' },
       action: {
         buttons: [
-          { type: 'reply', reply: { id: 'btn-reservar', title: 'ðŸ“… Reservar visita' } },
-          { type: 'reply', reply: { id: 'btn-precio', title: 'ðŸ’° Precios' } },
-          { type: 'reply', reply: { id: 'btn-info', title: 'ðŸ•³ï¸ MÃ¡s informaciÃ³n' } },
+          { type: 'reply', reply: { id: 'btn-reservar', title: '📅 Reservar visita' } },
+          { type: 'reply', reply: { id: 'btn-precio', title: '💰 Precios' } },
+          { type: 'reply', reply: { id: 'btn-info', title: '🕳️ Más información' } },
         ],
       },
     },
@@ -315,16 +315,16 @@ async function resetContact(env, waId) {
 
 async function sendMainMenu(env, from, intro) {
   const text = [
-    intro || 'ðŸ¦‡ Â¡Hola! Bienvenido a DARKBAT. ðŸ‘‹',
+    intro || '🦇 ¡Hola! Bienvenido a DARKBAT. 👋',
     ``,
-    `Somos un sitio turÃ­stico de naturaleza ubicado en Santa SofÃ­a, BoyacÃ¡, donde podrÃ¡s disfrutar de una visita guiada a una cueva natural.`,
-    `ðŸ• Nuestro horario de atenciÃ³n es todos los dÃ­as de 8:00 a. m. a 5:00 p. m.`,
+    `Somos un sitio turístico de naturaleza ubicado en Santa Sofía, Boyacá, donde podrás disfrutar de una visita guiada a una cueva natural.`,
+    `🕐 Nuestro horario de atención es todos los días de 8:00 a. m. a 5:00 p. m.`,
     ``,
-    `Â¿En quÃ© podemos ayudarte?`,
-    `1ï¸âƒ£ ðŸ•³ï¸ MÃ¡s informaciÃ³n`,
-    `2ï¸âƒ£ ðŸ“… Quiero reservar`,
-    `3ï¸âƒ£ ðŸ’° Precio`,
-    `4ï¸âƒ£ ðŸ“ UbicaciÃ³n`,
+    `¿En qué podemos ayudarte?`,
+    `1️⃣ 🕳️ Más información`,
+    `2️⃣ 📅 Quiero reservar`,
+    `3️⃣ 💰 Precio`,
+    `4️⃣ 📍 Ubicación`,
     outOfHoursNotice(),
   ].join('\n')
   return sendWhatsApp(env, from, text)
@@ -332,13 +332,13 @@ async function sendMainMenu(env, from, intro) {
 
 async function sendInfo(env, from) {
   const text = [
-    `ðŸ¦‡ *DARKBAT*`,
-    `ðŸ“ Santa SofÃ­a, BoyacÃ¡`,
-    `ðŸ• Horario de atenciÃ³n: todos los dÃ­as de 8:00 a. m. a 5:00 p. m.`,
-    `ðŸ’° Precio: $15.000 COP por persona`,
-    `ðŸ§­ Incluye visita guiada a la cueva.`,
+    `🦇 *DARKBAT*`,
+    `📍 Santa Sofía, Boyacá`,
+    `🕐 Horario de atención: todos los días de 8:00 a. m. a 5:00 p. m.`,
+    `💰 Precio: $15.000 COP por persona`,
+    `🧭 Incluye visita guiada a la cueva.`,
     ``,
-    `Si quieres visitarnos, puedo ayudarte a realizar una reserva. ðŸ“…`,
+    `Si quieres visitarnos, puedo ayudarte a realizar una reserva. 📅`,
     `Responde *2* para reservar.`,
     outOfHoursNotice(),
   ].join('\n')
@@ -347,11 +347,11 @@ async function sendInfo(env, from) {
 
 async function sendPrice(env, from) {
   const text = [
-    `ðŸ’° El precio de entrada a DARKBAT es de *$15.000 COP* por persona.`,
-    `La entrada incluye la visita guiada a la cueva. ðŸ¦‡`,
-    `ðŸ• Nuestro horario de atenciÃ³n es de 8:00 a. m. a 5:00 p. m.`,
+    `💰 El precio de entrada a DARKBAT es de *$15.000 COP* por persona.`,
+    `La entrada incluye la visita guiada a la cueva. 🦇`,
+    `🕐 Nuestro horario de atención es de 8:00 a. m. a 5:00 p. m.`,
     ``,
-    `Â¿Quieres realizar una reserva? ðŸ“… Responde *2*`,
+    `¿Quieres realizar una reserva? 📅 Responde *2*`,
     outOfHoursNotice(),
   ].join('\n')
   return sendWhatsApp(env, from, text)
@@ -359,29 +359,29 @@ async function sendPrice(env, from) {
 
 async function sendPaymentInfo(env, from) {
   const text = [
-    `ðŸ’³ *Formas de pago DARKBAT*`,
+    `💳 *Formas de pago DARKBAT*`,
     ``,
-    `El pago se realiza por *Nequi* al nÃºmero *${NEQUI}* ðŸ’™`,
+    `El pago se realiza por *Nequi* al número *${NEQUI}* 💙`,
     ``,
-    `Al reservar se paga un *abono* segÃºn el grupo:`,
-    `Â· 5-10 personas: 10%`,
-    `Â· 11-20 personas: 15%`,
-    `Â· 21-30 personas: 20%`,
-    `Â· 31-40 personas: 25%`,
-    `Â· 41-50 personas: 30%`,
+    `Al reservar se paga un *abono* según el grupo:`,
+    `· 5-10 personas: 10%`,
+    `· 11-20 personas: 15%`,
+    `· 21-30 personas: 20%`,
+    `· 31-40 personas: 25%`,
+    `· 41-50 personas: 30%`,
     ``,
-    `El saldo restante se paga el dÃ­a de la visita.`,
-    `DespuÃ©s de pagar, envÃ­a aquÃ­ la captura del comprobante. ðŸ“·`,
+    `El saldo restante se paga el día de la visita.`,
+    `Después de pagar, envía aquí la captura del comprobante. 📷`,
     ``,
-    `Â¿Quieres reservar? Responde *2* ðŸ“…`,
+    `¿Quieres reservar? Responde *2* 📅`,
   ].join('\n')
   return sendWhatsApp(env, from, text)
 }
 
 async function sendLocation(env, from) {
   const text = [
-    `ðŸ“ DARKBAT se encuentra en *Santa SofÃ­a, BoyacÃ¡, Colombia*. ðŸ¦‡`,
-    `ðŸ• Nuestro horario de atenciÃ³n es de 8:00 a. m. a 5:00 p. m.`,
+    `📍 DARKBAT se encuentra en *Santa Sofía, Boyacá, Colombia*. 🦇`,
+    `🕐 Nuestro horario de atención es de 8:00 a. m. a 5:00 p. m.`,
     outOfHoursNotice(),
   ].join('\n')
   return sendWhatsApp(env, from, text)
@@ -389,58 +389,56 @@ async function sendLocation(env, from) {
 
 async function askNext(env, from, booking, usage) {
   if (!booking.name) {
-    return sendWhatsApp(env, from, 'ðŸ¦‡ Â¡Perfecto! Vamos a realizar tu reserva.\n\nPrimero, Â¿cuÃ¡l es tu nombre?')
+    return sendWhatsApp(env, from, '🦇 ¡Perfecto! Vamos a realizar tu reserva.\n\nPrimero, ¿cuál es tu nombre?')
   }
   if (!booking.email || booking.email.startsWith('wa-')) {
-    return sendWhatsApp(env, from, 'ðŸ“§ Â¿CuÃ¡l es tu correo electrÃ³nico?\n(Ej: correo@ejemplo.com)')
+    return sendWhatsApp(env, from, '📧 ¿Cuál es tu correo electrónico?\n(Ej: correo@ejemplo.com)')
   }
   if (!booking.people) {
-    return sendWhatsApp(env, from, 'ðŸ‘¥ Â¿CuÃ¡ntas personas asistirÃ¡n?\n(MÃ­nimo 5, mÃ¡ximo 50)')
+    return sendWhatsApp(env, from, '👥 ¿Cuántas personas asistirán?\n(Mínimo 5, máximo 50)')
   }
   if (!booking.visit_date) {
-    return sendWhatsApp(env, from, 'ðŸ“… Â¿QuÃ© fecha deseas visitar DARKBAT?\n(Ej: "maÃ±ana", "el sÃ¡bado" â€” no aceptamos fechas pasadas)')
+    return sendWhatsApp(env, from, '📅 ¿Qué fecha deseas visitar DARKBAT?\n(Ej: "mañana", "el sábado" — no aceptamos fechas pasadas)')
   }
   if (!booking.visit_time) {
     const free = freeSlots(usage, booking.visit_date, booking.people || 0)
-    if (!free.length) return sendWhatsApp(env, from, `ðŸ˜… Ese dÃ­a estÃ¡ completo. Elige otra fecha (ej: "maÃ±ana").`)
-    return sendWhatsApp(env, from, `ðŸ• Â¿A quÃ© hora deseas realizar la visita?\n\nNuestro horario de atenciÃ³n es de 8:00 a. m. a 5:00 p. m.\nHorarios libres para el ${booking.visit_date}: ${free.join(', ')}`)
+    if (!free.length) return sendWhatsApp(env, from, `😅 Ese día está completo. Elige otra fecha (ej: "mañana").`)
+    return sendWhatsApp(env, from, `🕐 ¿A qué hora deseas realizar la visita?\n\nNuestro horario de atención es de 8:00 a. m. a 5:00 p. m.\nHorarios libres para el ${booking.visit_date}: ${free.join(', ')}`)
   }
   if (!booking.lunch) {
     return sendWhatsApp(env, from, [
-      `ðŸ½ï¸ Â¿Deseas incluir almuerzo en tu visita?`,
+      `🍽️ ¿Deseas incluir almuerzo en tu visita?`,
       ``,
-      `1ï¸âƒ£ SÃ­, deseo almuerzo`,
-      `2ï¸âƒ£ No, gracias`,
+      `1️⃣ Sí, deseo almuerzo`,
+      `2️⃣ No, gracias`,
       ``,
-      `âš ï¸ El almuerzo debe reservarse con al menos una semana de anticipaciÃ³n.`,
+      `⚠️ El almuerzo debe reservarse con al menos una semana de anticipación.`,
     ].join('\n'))
   }
   if (booking.comments === undefined || booking.comments === null) {
-    return sendWhatsApp(env, from, 'ðŸ“ Â¿Alguna solicitud especial? (opcional)\n\nEscribe tu comentario o responde *ninguno* para continuar.')
+    return sendWhatsApp(env, from, '📝 ¿Alguna solicitud especial? (opcional)\n\nEscribe tu comentario o responde *ninguno* para continuar.')
   }
   return showSummary(env, from, booking)
 }
 
 async function showSummary(env, from, booking) {
   const total = booking.people * PRICE
-  const rate = getDepositRate(booking.people)
-  const deposit = Math.round(total * rate)
   await updateBooking(env, booking.id, { payment_status: 'awaiting_confirm', comments: null })
   const text = [
-    `ðŸ¦‡ *RESUMEN DE TU RESERVA*`,
+    `🦇 *RESUMEN DE TU RESERVA*`,
     ``,
-    `ðŸ‘¤ Nombre: ${booking.name}`,
-    `ðŸ“§ Correo: ${booking.email}`,
-    `ðŸ‘¥ Personas: ${booking.people}`,
-    `ðŸ“… Fecha: ${booking.visit_date}`,
-    `ðŸ• Hora: ${t5(booking.visit_time)}`,
-    `ðŸ½ï¸ Almuerzo: ${booking.lunch === 'yes' ? 'SÃ­' : 'No'}`,
-    `ðŸ“ Comentarios: ${booking.comments || 'Ninguno'}`,
-    `ðŸ’° Total: $${total.toLocaleString('es-CO')} COP`,
+    `👤 Nombre: ${booking.name}`,
+    `📧 Correo: ${booking.email}`,
+    `👥 Personas: ${booking.people}`,
+    `📅 Fecha: ${booking.visit_date}`,
+    `🕐 Hora: ${t5(booking.visit_time)}`,
+    `🍽️ Almuerzo: ${booking.lunch === 'yes' ? 'Sí' : 'No'}`,
+    `📝 Comentarios: ${booking.comments || 'Ninguno'}`,
+    `💰 Total: $${total.toLocaleString('es-CO')} COP`,
     ``,
-    `Â¿Los datos son correctos?`,
-    `1ï¸âƒ£ âœ… Confirmar`,
-    `2ï¸âƒ£ âœï¸ Modificar`,
+    `¿Los datos son correctos?`,
+    `1️⃣ ✅ Confirmar`,
+    `2️⃣ ✏️ Modificar`,
   ].join('\n')
   return sendWhatsApp(env, from, text)
 }
@@ -466,28 +464,28 @@ async function startBooking(env, from, text) {
     }),
   })
   const booking = res.ok ? (await res.json())[0] : null
-  if (!booking) return sendWhatsApp(env, from, 'ðŸ˜¢ Hubo un problema guardando tu reserva. Intenta de nuevo.')
+  if (!booking) return sendWhatsApp(env, from, '😢 Hubo un problema guardando tu reserva. Intenta de nuevo.')
   return askNext(env, from, booking, usage)
 }
 
 async function continueBooking(env, from, draft, text, lower) {
   if (/^(no|nel|nop|nada)\b/i.test(lower.trim())) {
     await deleteBooking(env, draft.id)
-    return sendWhatsApp(env, from, 'Listo, cancelamos el proceso. ðŸ˜Š Â¿En quÃ© mÃ¡s te ayudo?')
+    return sendWhatsApp(env, from, 'Listo, cancelamos el proceso. 😊 ¿En qué más te ayudo?')
   }
-  if (/^(cancelar|cancelaciÃ³n|cancelacion|anular)\b/i.test(lower.trim())) {
+  if (/^(cancelar|cancelación|cancelacion|anular)\b/i.test(lower.trim())) {
     await deleteBooking(env, draft.id)
-    return sendWhatsApp(env, from, 'Listo, cancelamos el proceso de reserva. ðŸ˜Š')
+    return sendWhatsApp(env, from, 'Listo, cancelamos el proceso de reserva. 😊')
   }
-  if (/^(volver|men[uÃº]|ayuda|ayudame)\b/i.test(lower.trim())) {
+  if (/^(volver|men[uú]|ayuda|ayudame)\b/i.test(lower.trim())) {
     await deleteBooking(env, draft.id)
-    return sendMainMenu(env, from, 'ðŸ¦‡ Volvamos al menÃº principal.')
+    return sendMainMenu(env, from, '🦇 Volvamos al menú principal.')
   }
   if (/^(hola|buenas|buen[oa]s?|hey|hi|ey|saludos)\b/i.test(lower.trim())) {
     await deleteBooking(env, draft.id)
-    return sendMainMenu(env, from, 'ðŸ¦‡ Â¡Hola! Bienvenido a DARKBAT. ðŸ‘‹')
+    return sendMainMenu(env, from, '🦇 ¡Hola! Bienvenido a DARKBAT. 👋')
   }
-  if (/(m[aÃ¡]s informaci|ubicaci[oÃ³]n|precios?|reservar visita)/i.test(lower)) {
+  if (/(m[aá]s informaci|ubicaci[oó]n|precios?|reservar visita)/i.test(lower)) {
     await deleteBooking(env, draft.id)
     if (/reservar visita/.test(lower)) return startBooking(env, from, text)
     if (/preci/.test(lower)) return sendPrice(env, from)
@@ -509,17 +507,17 @@ async function continueBooking(env, from, draft, text, lower) {
     if (/^(2|modificar|modific)\b/i.test(lower.trim())) {
       await updateBooking(env, draft.id, { comments: 'modify' })
       return sendWhatsApp(env, from, [
-        `âœï¸ Â¿QuÃ© dato deseas modificar?`,
-        `1ï¸âƒ£ Nombre`,
-        `2ï¸âƒ£ Personas`,
-        `3ï¸âƒ£ Fecha`,
-        `4ï¸âƒ£ Hora`,
-        `5ï¸âƒ£ Correo electrÃ³nico`,
-        `6ï¸âƒ£ Almuerzo`,
-        `7ï¸âƒ£ Comentarios`,
+        `✏️ ¿Qué dato deseas modificar?`,
+        `1️⃣ Nombre`,
+        `2️⃣ Personas`,
+        `3️⃣ Fecha`,
+        `4️⃣ Hora`,
+        `5️⃣ Correo electrónico`,
+        `6️⃣ Almuerzo`,
+        `7️⃣ Comentarios`,
       ].join('\n'))
     }
-    if (/^(1|confirmar|confirmo|s[Ã­i]|sip|sisi|dale|ok|okey|listo|adelante|sisas)\b/i.test(lower.trim())) {
+    if (/^(1|confirmar|confirmo|s[íi]|sip|sisi|dale|ok|okey|listo|adelante|sisas)\b/i.test(lower.trim())) {
       return finalizeBooking(env, from, draft)
     }
   }
@@ -527,7 +525,7 @@ async function continueBooking(env, from, draft, text, lower) {
   const step = !draft.lunch ? 'lunch' : draft.comments === null || draft.comments === undefined ? 'comments' : null
   const fields = {}
   if (step === 'lunch') {
-    if (/^(1|s[Ã­i]|sip|sisi|claro|dale)\b/i.test(lower.trim())) fields.lunch = 'yes'
+    if (/^(1|s[íi]|sip|sisi|claro|dale)\b/i.test(lower.trim())) fields.lunch = 'yes'
     else if (/^(2|no|nop|nel)\b/i.test(lower.trim())) fields.lunch = 'no'
   } else if (step === 'comments') {
     if (/^(ninguno|no|nada|[-.])\b/i.test(lower.trim())) fields.comments = null
@@ -553,12 +551,12 @@ async function continueBooking(env, from, draft, text, lower) {
   }
 
   const updated = await updateBooking(env, draft.id, { ...fields })
-  if (!updated) return sendWhatsApp(env, from, 'ðŸ˜¢ Hubo un error guardando tus datos. Intenta de nuevo.')
+  if (!updated) return sendWhatsApp(env, from, '😢 Hubo un error guardando tus datos. Intenta de nuevo.')
 
   if (updated.visit_time && updated.visit_date === draft.visit_date && freeSlots(usage, updated.visit_date, updated.people || 0).indexOf(t5(updated.visit_time)) === -1) {
     await updateBooking(env, draft.id, { visit_time: null })
     const free = freeSlots(usage, updated.visit_date, updated.people || 0)
-    return sendWhatsApp(env, from, `ðŸ˜… Ese horario ya no estÃ¡ libre. Disponibles: ${free.length ? free.join(', ') : 'otro dÃ­a'}.\nÂ¿A quÃ© hora prefieres?`)
+    return sendWhatsApp(env, from, `😅 Ese horario ya no está libre. Disponibles: ${free.length ? free.join(', ') : 'otro día'}.\n¿A qué hora prefieres?`)
   }
 
   return askNext(env, from, updated, usage)
@@ -569,7 +567,7 @@ async function finalizeBooking(env, from, draft) {
   if ((usage[`${draft.visit_date}|${t5(draft.visit_time)}`] || 0) + draft.people > SLOT_CAPACITY) {
     const free = freeSlots(usage, draft.visit_date, draft.people)
     await updateBooking(env, draft.id, { visit_time: null, payment_status: 'draft', comments: null })
-    return sendWhatsApp(env, from, `ðŸ˜… Ese horario se acaba de llenar. Estos siguen libres: ${free.length ? free.join(', ') : 'otro dÃ­a'}.\nÂ¿A quÃ© hora prefieres?`)
+    return sendWhatsApp(env, from, `😅 Ese horario se acaba de llenar. Estos siguen libres: ${free.length ? free.join(', ') : 'otro día'}.\n¿A qué hora prefieres?`)
   }
 
   const total = draft.people * PRICE
@@ -584,19 +582,19 @@ async function finalizeBooking(env, from, draft) {
   })
   await sendTelegramAlert(env, { ...draft, total, deposit, depositRate: rate, receiptPath: null, source: 'bot' })
   return sendWhatsApp(env, from, [
-    `âœ… Â¡Reserva registrada correctamente!`,
+    `✅ ¡Reserva registrada correctamente!`,
     ``,
-    `ðŸ¦‡ *DARKBAT*`,
-    `ðŸ‘¤ ${draft.name}`,
-    `ðŸ“§ ${draft.email}`,
-    `ðŸ‘¥ ${draft.people} personas`,
-    `ðŸ“… ${draft.visit_date}`,
-    `ðŸ• ${t5(draft.visit_time)}`,
-    `ðŸ½ï¸ Almuerzo: ${draft.lunch === 'yes' ? 'SÃ­' : 'No'}${draft.comments ? `\nðŸ“ ${draft.comments}` : ''}`,
-    `ðŸ’° Total: $${total.toLocaleString('es-CO')} COP`,
+    `🦇 *DARKBAT*`,
+    `👤 ${draft.name}`,
+    `📧 ${draft.email}`,
+    `👥 ${draft.people} personas`,
+    `📅 ${draft.visit_date}`,
+    `🕐 ${t5(draft.visit_time)}`,
+    `🍽️ Almuerzo: ${draft.lunch === 'yes' ? 'Sí' : 'No'}${draft.comments ? `\n📝 ${draft.comments}` : ''}`,
+    `💰 Total: $${total.toLocaleString('es-CO')} COP`,
     ``,
-    `ðŸ’³ Para confirmar tu cupo, paga el abono de *$${deposit.toLocaleString('es-CO')} COP* por Nequi (*${NEQUI}*) y envÃ­ame la captura del pago aquÃ­ mismo. âœ…`,
-    `Â¡Te esperamos en DARKBAT! ðŸ¦‡`,
+    `💳 Para confirmar tu cupo, paga el abono de *$${deposit.toLocaleString('es-CO')} COP* por Nequi (*${NEQUI}*) y envíame la captura del pago aquí mismo. ✅`,
+    `¡Te esperamos en DARKBAT! 🦇`,
   ].join('\n'))
 }
 
@@ -608,11 +606,11 @@ async function handleCancel(env, from) {
   )
   const booking = res.ok ? (await res.json())[0] : null
   if (!booking) {
-    return sendWhatsApp(env, from, 'âš ï¸ No encontrÃ© reservas activas a tu nombre. Si quieres visitarnos, responde *2* para reservar. ðŸ¦‡')
+    return sendWhatsApp(env, from, '⚠️ No encontré reservas activas a tu nombre. Si quieres visitarnos, responde *2* para reservar. 🦇')
   }
   await updateBooking(env, booking.id, { payment_status: 'cancelled' })
   await sendTelegramCancel(env, booking)
-  return sendWhatsApp(env, from, `âœ… Tu reserva del *${booking.visit_date}* a las *${String(booking.visit_time || '').slice(0, 5)}* para *${booking.people}* personas fue *cancelada*.\n\nÂ¡Te esperamos en otra ocasiÃ³n! ðŸ¦‡`)
+  return sendWhatsApp(env, from, `✅ Tu reserva del *${booking.visit_date}* a las *${String(booking.visit_time || '').slice(0, 5)}* para *${booking.people}* personas fue *cancelada*.\n\n¡Te esperamos en otra ocasión! 🦇`)
 }
 
 async function processText(env, from, text) {
@@ -640,23 +638,23 @@ async function processText(env, from, text) {
   }
 
   if (/(cancelar|cancelaci|anular)/i.test(lower)) return handleCancel(env, from)
-  if (/^(buenas|hola|buen|ayuda|ayudame|info\b|infor)/i.test(lower) || /^(volver|men[uÃº]|1)\b/.test(lower) || /^1$/.test(lower)) {
+  if (/^(buenas|hola|buen|ayuda|ayudame|info\b|infor)/i.test(lower) || /^(volver|men[uú]|1)\b/.test(lower) || /^1$/.test(lower)) {
     if (/^(1|info)/i.test(lower)) return sendInfo(env, from)
     return sendMainMenu(env, from)
   }
-  if (/^(2|reserv|quiero ir|vamos|me gustarÃ­a ir|me gustaria ir|cupo|disponib|horario|personas|pax|fecha\b|dÃ­a\b|dia\b|hoy\b|maÃ±ana|manana)/i.test(lower)) {
+  if (/^(2|reserv|quiero ir|vamos|me gustaría ir|me gustaria ir|cupo|disponib|horario|personas|pax|fecha\b|día\b|dia\b|hoy\b|mañana|manana)/i.test(lower)) {
     return startBooking(env, from, text)
   }
-  if (/^(pago|pagar|nequi|abono)\b/i.test(lower) || /c[oÃ³]mo pago|como pago|d[oÃ³]nde pago|donde pago|qu[eÃ©] es el abono|cu[aÃ¡]nto es el abono|cuanto es el abono/i.test(lower)) {
+  if (/^(pago|pagar|nequi|abono)\b/i.test(lower) || /c[oó]mo pago|como pago|d[oó]nde pago|donde pago|qu[eé] es el abono|cu[aá]nto es el abono|cuanto es el abono/i.test(lower)) {
     return sendPaymentInfo(env, from)
   }
-  if (/^(3|precio|cu[aÃ¡]nto vale|cuanto vale|cu[aÃ¡]nto cuesta|cuanto cuesta|cobran|tarifa|valor|entrada)/i.test(lower) || /^3$/.test(lower)) {
+  if (/^(3|precio|cu[aá]nto vale|cuanto vale|cu[aá]nto cuesta|cuanto cuesta|cobran|tarifa|valor|entrada)/i.test(lower) || /^3$/.test(lower)) {
     return sendPrice(env, from)
   }
-  if (/^(4|ubica|d[oÃ³]nde queda|donde queda|d[oÃ³]nde quedan|donde quedan|c[oÃ³]mo llego|como llego|c[oÃ³]mo llegar|como llegar|direcci[oÃ³]n|direccion)/i.test(lower) || /^4$/.test(lower)) {
+  if (/^(4|ubica|d[oó]nde queda|donde queda|d[oó]nde quedan|donde quedan|c[oó]mo llego|como llego|c[oó]mo llegar|como llegar|direcci[oó]n|direccion)/i.test(lower) || /^4$/.test(lower)) {
     return sendLocation(env, from)
   }
-  if (/informaci[oÃ³]n|informacion|m[aÃ¡]s|mas|conocer|cueva/i.test(lower)) return sendInfo(env, from)
+  if (/informaci[oó]n|informacion|m[aá]s|mas|conocer|cueva/i.test(lower)) return sendInfo(env, from)
   if (/reserv/i.test(lower)) return startBooking(env, from, text)
 
   return generalChat(env, from, text)
@@ -664,11 +662,11 @@ async function processText(env, from, text) {
 
 async function generalChat(env, from, text) {
   const { days } = await getAvailability(env)
-  const prompt = `Eres el asistente de WhatsApp de DARKBAT, cueva turÃ­stica en Santa SofÃ­a (BoyacÃ¡, Colombia). Precio $15.000 COP/persona, horario 8:00-17:00, mÃ­nimo 5 personas. Pago por Nequi (314 459 5642). MenÃº: 1 informaciÃ³n, 2 reservar, 3 precio, 4 ubicaciÃ³n.
-El cliente (${from}) escribiÃ³: "${text}".
+  const prompt = `Eres el asistente de WhatsApp de DARKBAT, cueva turística en Santa Sofía (Boyacá, Colombia). Precio $15.000 COP/persona, horario 8:00-17:00, mínimo 5 personas. Pago por Nequi (314 459 5642). Menú: 1 información, 2 reservar, 3 precio, 4 ubicación.
+El cliente (${from}) escribió: "${text}".
 Disponibilidad real consultada (fecha: horarios libres):
 ${days.join('\n')}
-Responde en mÃ¡ximO 3 lÃ­neas, en espaÃ±ol, amable, SOLO lo que pregunta el cliente. NO repitas la informaciÃ³n general de DARKBAT ni el menÃº completo a menos que te lo pidan. Si quiere reservar, dile que responda "2".`
+Responde en máximO 3 líneas, en español, amable, SOLO lo que pregunta el cliente. NO repitas la información general de DARKBAT ni el menú completo a menos que te lo pidan. Si quiere reservar, dile que responda "2".`
   const ai = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.NVIDIA_API_KEY}` },
@@ -687,7 +685,7 @@ Responde en mÃ¡ximO 3 lÃ­neas, en espaÃ±ol, amable, SOLO lo que pregunta e
       return
     }
   }
-  await sendWhatsApp(env, from, `${'ðŸ¦‡ Â¡Hola! Soy el asistente de DARKBAT.\n\nResponde con el nÃºmero de la opciÃ³n:\n1ï¸âƒ£ InformaciÃ³n\n2ï¸âƒ£ Reservar\n3ï¸âƒ£ Precio\n4ï¸âƒ£ UbicaciÃ³n'}${outOfHoursNotice()}`)
+  await sendWhatsApp(env, from, `${'🦇 ¡Hola! Soy el asistente de DARKBAT.\n\nResponde con el número de la opción:\n1️⃣ Información\n2️⃣ Reservar\n3️⃣ Precio\n4️⃣ Ubicación'}${outOfHoursNotice()}`)
 }
 
 async function processImage(env, from, mediaId) {
@@ -717,8 +715,8 @@ async function processImage(env, from, mediaId) {
       const bytes = new Uint8Array(buffer)
       for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
       base64 = btoa(binary)
-    } catch (e) {
-      await sendWhatsApp(env, from, 'ðŸ˜¢ No pude descargar tu imagen. Intenta enviarla nuevamente.')
+    } catch {
+      await sendWhatsApp(env, from, '😢 No pude descargar tu imagen. Intenta enviarla nuevamente.')
       return
     }
 
@@ -734,7 +732,7 @@ async function processImage(env, from, mediaId) {
           content: [
             {
               type: 'text',
-              text: `Â¿Esta imagen es un comprobante de pago de Nequi o transferencia bancaria? El abono esperado es $${deposit.toLocaleString('es-CO')} COP. Responde SOLO JSON: {"es_comprobante":true|false,"monto":"solo nÃºmeros, ej 22500","detalle":"breve en espaÃ±ol"}. Reglas: es_comprobante es true SOLO si se ve un recibo/soporte real de pago con monto y fecha (pantalla de Nequi, transferencia, comprobante bancario). false si es foto de persona, paisaje, meme, captura sin datos de pago, etc. El monto debe ser el valor pagado que veas. Si el monto es menor al abono esperado, indica "es_comprobante":false con detalle del monto leÃ­do.`,
+              text: `¿Esta imagen es un comprobante de pago de Nequi o transferencia bancaria? El abono esperado es $${deposit.toLocaleString('es-CO')} COP. Responde SOLO JSON: {"es_comprobante":true|false,"monto":"solo números, ej 22500","detalle":"breve en español"}. Reglas: es_comprobante es true SOLO si se ve un recibo/soporte real de pago con monto y fecha (pantalla de Nequi, transferencia, comprobante bancario). false si es foto de persona, paisaje, meme, captura sin datos de pago, etc. El monto debe ser el valor pagado que veas. Si el monto es menor al abono esperado, indica "es_comprobante":false con detalle del monto leído.`,
             },
             { type: 'image_url', image_url: { url: `data:${contentType};base64,${base64}` } },
           ],
@@ -762,11 +760,11 @@ async function processImage(env, from, mediaId) {
 
     if (!result) throw new Error('parse')
     if (!result.es_comprobante) {
-      await sendWhatsApp(env, from, `âŒ Esa imagen no parece un comprobante de pago. ${result.detalle || ''}\n\nAdjunta la captura del pago de Nequi (${NEQUI}).`)
+      await sendWhatsApp(env, from, `❌ Esa imagen no parece un comprobante de pago. ${result.detalle || ''}\n\nAdjunta la captura del pago de Nequi (${NEQUI}).`)
       return
     }
     if (!booking) {
-      await sendWhatsApp(env, from, `ðŸ“· Â¡RecibÃ­ tu comprobante ($${result.monto || 'â€”'} COP)! Pero aÃºn no tengo tu reserva.\n\nResponde *2* para reservar y luego me envÃ­as el comprobante. ðŸ¦‡`)
+      await sendWhatsApp(env, from, `📷 ¡Recibí tu comprobante ($${result.monto || '—'} COP)! Pero aún no tengo tu reserva.\n\nResponde *2* para reservar y luego me envías el comprobante. 🦇`)
       return
     }
 
@@ -780,16 +778,16 @@ async function processImage(env, from, mediaId) {
         receipt_path: receiptPath || booking.receipt_path,
       })
       await sendTelegramPayment(env, booking, amount, deposit, true)
-      await sendWhatsApp(env, from, `âœ… Â¡Pago confirmado! *$${amount.toLocaleString('es-CO')} COP* recibidos. Tu reserva para el ${booking.visit_date} a las ${t5(booking.visit_time)} estÃ¡ lista. Â¡Te esperamos! ðŸ¦‡`)
+      await sendWhatsApp(env, from, `✅ ¡Pago confirmado! *$${amount.toLocaleString('es-CO')} COP* recibidos. Tu reserva para el ${booking.visit_date} a las ${t5(booking.visit_time)} está lista. ¡Te esperamos! 🦇`)
       return
     }
 
     await updateBooking(env, booking.id, { payment_status: 'pending_confirmation' })
     await sendTelegramPayment(env, booking, amount, deposit, false)
-    await sendWhatsApp(env, from, `ðŸ“· RecibÃ­ tu comprobante por *$${(amount || 0).toLocaleString('es-CO')} COP*, pero el abono esperado es *$${deposit.toLocaleString('es-CO')} COP*.\n\nÂ¿El pago es correcto? Mientras tanto lo reviso y te confirmo. ðŸ™`)
+    await sendWhatsApp(env, from, `📷 Recibí tu comprobante por *$${(amount || 0).toLocaleString('es-CO')} COP*, pero el abono esperado es *$${deposit.toLocaleString('es-CO')} COP*.\n\n¿El pago es correcto? Mientras tanto lo reviso y te confirmo. 🙏`)
   } catch {
     if (booking) await updateBooking(env, booking.id, { payment_status: 'pending_confirmation' })
-    await sendWhatsApp(env, from, 'ðŸ˜¢ No pude leer tu imagen. Intenta con una captura mÃ¡s clara del pago de Nequi.')
+    await sendWhatsApp(env, from, '😢 No pude leer tu imagen. Intenta con una captura más clara del pago de Nequi.')
   }
 }
 
@@ -835,19 +833,19 @@ async function sendWhatsAppPayload(env, to, body) {
 
 async function sendTelegramAlert(env, booking) {
   const message = [
-    `ðŸ¦‡ *NUEVA RESERVA DARKBAT*`,
+    `🦇 *NUEVA RESERVA DARKBAT*`,
     ``,
-    `ðŸ‘¤ *Cliente:* ${booking.name || 'â€”'}`,
-    `ðŸ“§ *Correo:* ${booking.email || 'â€”'}`,
-    `ðŸ“± *WhatsApp:* ${booking.whatsapp}`,
-    `ðŸ‘¥ *Personas:* ${booking.people || 'â€”'}`,
-    `ðŸ“… *Fecha:* ${booking.visit_date || 'â€”'}`,
-    `ðŸ• *Hora:* ${t5(booking.visit_time) || 'â€”'}`,
-    `ðŸ½ï¸ *Almuerzo:* ${booking.lunch === 'yes' ? 'SÃ­' : booking.lunch === 'no' ? 'No' : 'â€”'}`,
-    `ðŸ“ *Comentarios:* ${booking.comments || 'Ninguno'}`,
-    `ðŸ’° *Total:* $${(booking.total || 0).toLocaleString('es-CO')} COP`,
-    `ðŸ’³ *Abono (${Math.round(booking.depositRate * 100)}%):* $${(booking.deposit || 0).toLocaleString('es-CO')} COP`,
-    `ðŸ“Œ *Estado:* Confirmada por el cliente (pendiente de pago)`,
+    `👤 *Cliente:* ${booking.name || '—'}`,
+    `📧 *Correo:* ${booking.email || '—'}`,
+    `📱 *WhatsApp:* ${booking.whatsapp}`,
+    `👥 *Personas:* ${booking.people || '—'}`,
+    `📅 *Fecha:* ${booking.visit_date || '—'}`,
+    `🕐 *Hora:* ${t5(booking.visit_time) || '—'}`,
+    `🍽️ *Almuerzo:* ${booking.lunch === 'yes' ? 'Sí' : booking.lunch === 'no' ? 'No' : '—'}`,
+    `📝 *Comentarios:* ${booking.comments || 'Ninguno'}`,
+    `💰 *Total:* $${(booking.total || 0).toLocaleString('es-CO')} COP`,
+    `💳 *Abono (${Math.round(booking.depositRate * 100)}%):* $${(booking.deposit || 0).toLocaleString('es-CO')} COP`,
+    `📌 *Estado:* Confirmada por el cliente (pendiente de pago)`,
   ].join('\n')
 
   try {
@@ -863,9 +861,9 @@ async function sendTelegramAlert(env, booking) {
 
 async function sendTelegramCancel(env, booking) {
   const message = [
-    `ðŸš« *RESERVA CANCELADA*`,
-    `ðŸ‘¤ ${booking.name || 'â€”'} Â· ðŸ“± ${booking.whatsapp}`,
-    `ðŸ“… ${booking.visit_date || 'â€”'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} Â· ðŸ‘¥ ${booking.people || 'â€”'} pers`,
+    `🚫 *RESERVA CANCELADA*`,
+    `👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
+    `📅 ${booking.visit_date || '—'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} · 👥 ${booking.people || '—'} pers`,
   ].join('\n')
 
   try {
@@ -881,12 +879,12 @@ async function sendTelegramCancel(env, booking) {
 
 async function sendTelegramPayment(env, booking, amount, deposit, match) {
   const message = [
-    `ðŸ§¾ *Comprobante por WhatsApp*`,
-    `ðŸ‘¤ ${booking.name || 'â€”'} Â· ðŸ“± ${booking.whatsapp}`,
-    `ðŸ“… ${booking.visit_date || 'â€”'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} Â· ðŸ‘¥ ${booking.people || 'â€”'} pers`,
-    `ðŸ’° Comprobante: $${(amount || 0).toLocaleString('es-CO')} COP`,
-    `ðŸ’³ Abono esperado: $${(deposit || 0).toLocaleString('es-CO')} COP`,
-    `ðŸ“Œ Estado: ${match ? 'âœ… CONFIRMADO' : 'âš ï¸ REVISAR (no coincide)'}`,
+    `🧾 *Comprobante por WhatsApp*`,
+    `👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
+    `📅 ${booking.visit_date || '—'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} · 👥 ${booking.people || '—'} pers`,
+    `💰 Comprobante: $${(amount || 0).toLocaleString('es-CO')} COP`,
+    `💳 Abono esperado: $${(deposit || 0).toLocaleString('es-CO')} COP`,
+    `📌 Estado: ${match ? '✅ CONFIRMADO' : '⚠️ REVISAR (no coincide)'}`,
   ].join('\n')
 
   try {
