@@ -53,6 +53,29 @@ function getAnswer(input: string): string {
   return '🤔 Lo siento, no tengo esa información. Puedo ayudarte con horarios 🕐, precios 💰, ubicación 📍, verificar tu pago ✅ o consultar tus últimas reservas 📋. 😊'
 }
 
+function renderInline(line: string): React.ReactNode[] {
+  const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g)
+  return parts.map((part, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={i} className="text-white font-semibold">{part.slice(2, -2)}</strong>
+    if (/^\*[^*]+\*$/.test(part)) return <em key={i} className="text-stone-200">{part.slice(1, -1)}</em>
+    if (/^`[^`]+`$/.test(part)) return <code key={i} className="px-1 py-0.5 rounded bg-white/10 text-gold-200 text-xs">{part.slice(1, -1)}</code>
+    return part
+  })
+}
+
+function renderRich(text: string): React.ReactNode {
+  return (
+    <>
+      {text.split('\n').map((line, i) => (
+        <span key={i}>
+          {i > 0 && <br />}
+          {renderInline(line)}
+        </span>
+      ))}
+    </>
+  )
+}
+
 type ChatStep = 'idle' | 'awaiting_name' | 'awaiting_whatsapp'
 
 export function ChatBot() {
@@ -393,13 +416,13 @@ export function ChatBot() {
                   className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                    className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
                       msg.isUser
                         ? 'bg-gold-500/20 text-gold-200 border border-gold-500/20 rounded-br-md'
                         : 'bg-white/5 text-stone-300 border border-white/5 rounded-bl-md'
                     }`}
                   >
-                    {msg.text}
+                    {msg.isUser ? msg.text : renderRich(msg.text)}
                     {msg.image && (
                       <img src={msg.image} alt="Imagen enviada" className="mt-2 rounded-lg max-h-40 object-cover border border-white/10" />
                     )}
