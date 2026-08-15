@@ -54,7 +54,7 @@ export async function onRequestPost(context) {
               text: `Analiza la siguiente imagen. Es lo que un cliente de DARKBAT (cueva turística) envió como supuesto comprobante de un pago por Nequi. El abono esperado es $${Number(expectedAmount).toLocaleString('es-CO')} COP. Hoy es ${today}. ${visitContext}
 
 Responde SOLO en este formato JSON (sin texto adicional):
-{"es_comprobante":true|false,"monto":"monto en números sin puntos ni símbolos, ej 7500","fecha_pago":"YYYY-MM-DD del pago si es legible, si no \"\"","coincide":true|false,"detalle":"explicación breve en español"}
+{"es_comprobante":true|false,"monto":"monto en números sin puntos ni símbolos, ej 7500","fecha_pago":"YYYY-MM-DD del pago si es legible, si no ""","coincide":true|false,"detalle":"explicación breve en español"}
 
 Reglas:
 - es_comprobante: true SOLO si la imagen es un comprobante/recibo real de pago (Nequi, transferencia bancaria, soporte de pago con monto y fecha). false si es cualquier otra cosa: foto de persona, paisaje, meme, captura sin datos de pago, etc.

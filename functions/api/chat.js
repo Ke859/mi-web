@@ -16,18 +16,19 @@ function buildSystemPrompt() {
     .map(([k, v]) => `${k}=${v}`)
     .join(',')
 
-  return `Asistente de DARKBAT (cueva turística, Santa Sofía, Boyacá). Precio $15.000/persona. Horario 8:00-17:00 (solo HH:MM 24h: "2:30 pm"→"14:30"). Mín 5, máx 50 personas. Abono por Nequi 314 459 5642: 10%(5-10 pers), 15%(11-20), 20%(21-30), 25%(31-40), 30%(41-50); ej: 8 pers → 10% de $120.000 = $12.000; saldo el día de la visita. Almuerzo opcional (reservar 1 semana antes). Reservas en la sección "Reserva" de la web; pago se verifica por WhatsApp.
+  return `Asistente de DARKBAT (cueva turística, Santa Sofía, Boyacá). Precio $15.000 COP/persona. Horario 8:00-17:00 (solo HH:MM 24h: "2:30 pm"→"14:30"). Mín 5, máx 50 personas. Abono por Nequi 314 459 5642: 10%(5-10 pers), 15%(11-20), 20%(21-30), 25%(31-40), 30%(41-50); ej: 8 pers → 10% de $120.000 = $12.000; saldo el día de la visita. Almuerzo opcional (reservar 1 semana antes). Reservas en la sección "Reserva" de la web; pago se verifica por WhatsApp.
 Hoy es ${hoy}. Calendario: mañana=${refs.mañana}, pasado mañana=${refs.PAS}, ${refText}. Fechas numéricas SIEMPRE DÍA/MES/AÑO → "YYYY-MM-DD".
 
 REGLAS ESTRICTAS:
-1. Español amable, máx 4 líneas.
-2. Solo temas DARKBAT.
-3. Si quiere reservar: confirma fecha y personas + abono exacto (tabla), y pregunta UN dato a la vez (1.hora, 2.nombre, 3.whatsapp 10 dígitos, 4.correo, 5.almuerzo).
-4. En la ÚLTIMA línea de tu respuesta agrega: RESERVA_JSON:{"date":"YYYY-MM-DD","time":"HH:MM","people":N,"lunch":"yes|no","name":"","whatsapp":"","email":""} con SOLO datos que el usuario dijo explícitamente (lunch solo si lo mencionó; los demás vacíos). Si no hay ningún dato, omite la línea.
-5. PROHIBIDO markdown: sin asteriscos, sin guiones, sin negritas. Texto plano con saltos de línea.
-6. PROHIBIDO simular conversaciones: responde solo al último mensaje del usuario, espera su respuesta.
-7. Hora fuera de 08:00-17:00: pide otra hora sin "time" en el JSON.
-8. Si el usuario confirma (sí/confirmo/dale/listo): si falta un dato pídelo, si no responde que procede a registrar.`
+1. Tono de chat de WhatsApp: natural, amable, corto. MÁXIMO 4 líneas.
+2. PROHIBIDO usar títulos, secciones, encabezados ni viñetas ("Confirmación:", "Abono y Precio:", "Paso siguiente:"...). Escribe párrafos fluidos.
+3. Solo temas DARKBAT.
+4. Si quiere reservar: confirma fecha y personas + abono exacto (tabla), y pregunta UN dato a la vez (1.hora, 2.nombre, 3.whatsapp 10 dígitos, 4.correo, 5.almuerzo).
+5. Al final agrega en su propia línea, EXACTAMENTE con guion bajo y dos puntos: RESERVA_JSON:{"date":"YYYY-MM-DD","time":"HH:MM","people":N,"lunch":"yes|no","name":"","whatsapp":"","email":""} con SOLO datos dichos explícitamente por el usuario (lunch solo si lo mencionó; los demás van vacíos). Si no hay ningún dato, omite la línea. No inventes campos ni valores.
+6. PROHIBIDO markdown: sin asteriscos, sin negritas, sin guiones. Texto plano.
+7. PROHIBIDO simular conversaciones: responde solo al último mensaje del usuario.
+8. Hora fuera de 08:00-17:00: pide otra hora sin "time" en el JSON.
+9. Si el usuario confirma (sí/confirmo/dale/listo): si falta un dato pídelo, si no responde que procede a registrar.`
 };
 
 export async function onRequestPost(context) {
@@ -69,7 +70,7 @@ IMPORTANTE: para la fecha que el usuario pida, usa SOLO los horarios listados co
       body: JSON.stringify({
         model: 'nvidia/llama-3.3-nemotron-super-49b-v1',
         messages,
-        temperature: 0.7,
+        temperature: 0.6,
         top_p: 1,
         max_tokens: 800,
         seed: 42,
@@ -87,14 +88,31 @@ IMPORTANTE: para la fecha que el usuario pida, usa SOLO los horarios listados co
     let content = data.choices?.[0]?.message?.content ?? ''
 
     let booking = null
-    const match = content.match(/RESERVA_JSON:(\{[\s\S]*?\})/)
-    if (match) {
+    const extractBooking = (text) => {
+      const tagged = text.match(/RESERVA[_ ]?JSON\s*[:＝]?\s*(\{[\s\S]*?\})/i)
+      if (tagged) return { json: tagged[1], start: tagged.index, end: tagged.index + tagged[0].length }
+      const any = text.match(/\{[\s\S]*?\}/g) || []
+      for (const candidate of any) {
+        try {
+          const parsed = JSON.parse(candidate)
+          if (parsed && typeof parsed === 'object' && ('date' in parsed || 'people' in parsed || 'time' in parsed)) {
+            return { json: candidate, start: text.indexOf(candidate), end: text.indexOf(candidate) + candidate.length }
+          }
+        } catch {
+          /* noop */
+        }
+      }
+      return null
+    }
+
+    const found = extractBooking(content)
+    if (found) {
       try {
-        booking = JSON.parse(match[1])
+        booking = JSON.parse(found.json)
       } catch {
         booking = null
       }
-      content = content.replace(/RESERVA_JSON:(\{[\s\S]*?\})/, '').trim()
+      content = content.slice(0, found.start) + content.slice(found.end)
     }
 
     content = content.replace(/[*_]{1,}/g, '').replace(/^\s*[-•]\s*/gm, '').trim()

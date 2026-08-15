@@ -3,7 +3,7 @@ export default {
     ctx.waitUntil(runSummary())
   },
 
-  async fetch(request) {
+  async fetch(_request) {
     const result = await runSummary()
     return Response.json(result)
   },

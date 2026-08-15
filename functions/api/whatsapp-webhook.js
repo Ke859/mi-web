@@ -423,7 +423,7 @@ async function askNext(env, from, booking, usage) {
 
 async function showSummary(env, from, booking) {
   const total = booking.people * PRICE
-  await updateBooking(env, booking.id, { payment_status: 'awaiting_confirm', comments: null })
+  await updateBooking(env, booking.id, { payment_status: 'awaiting_confirm' })
   const text = [
     `🦇 *RESUMEN DE TU RESERVA*`,
     ``,
@@ -578,7 +578,6 @@ async function finalizeBooking(env, from, draft) {
     total_cop: total,
     deposit_rate: rate,
     deposit_cop: deposit,
-    comments: 'WhatsApp',
   })
   await sendTelegramAlert(env, { ...draft, total, deposit, depositRate: rate, receiptPath: null, source: 'bot' })
   return sendWhatsApp(env, from, [
