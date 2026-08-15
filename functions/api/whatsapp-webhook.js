@@ -415,8 +415,16 @@ async function askNext(env, from, booking, usage) {
       `⚠️ El almuerzo debe reservarse con al menos una semana de anticipación.`,
     ].join('\n'))
   }
+  if (booking.comments === 'pending') {
+    return sendWhatsApp(env, from, '✍️ Escribe tu comentario o responde *2* para omitirlo.')
+  }
   if (booking.comments === undefined || booking.comments === null) {
-    return sendWhatsApp(env, from, '📝 ¿Alguna solicitud especial? (opcional)\n\nEscribe tu comentario o responde *ninguno* para continuar.')
+    return sendWhatsApp(env, from, [
+      `📝 ¿Alguna solicitud especial? (opcional)`,
+      ``,
+      `1️⃣ Sí, escribir un comentario`,
+      `2️⃣ No tengo comentarios`,
+    ].join('\n'))
   }
   return showSummary(env, from, booking)
 }
@@ -522,13 +530,17 @@ async function continueBooking(env, from, draft, text, lower) {
     }
   }
 
-  const step = !draft.lunch ? 'lunch' : draft.comments === null || draft.comments === undefined ? 'comments' : null
+  const step = !draft.lunch ? 'lunch' : draft.comments === 'pending' ? 'comment_text' : draft.comments === null || draft.comments === undefined ? 'comments' : null
   const fields = {}
   if (step === 'lunch') {
     if (/^(1|s[íi]|sip|sisi|claro|dale)\b/i.test(lower.trim())) fields.lunch = 'yes'
     else if (/^(2|no|nop|nel)\b/i.test(lower.trim())) fields.lunch = 'no'
   } else if (step === 'comments') {
-    if (/^(ninguno|no|nada|[-.])\b/i.test(lower.trim())) fields.comments = ''
+    if (/^(1|s[íi]|sip|sisi|claro|dale)\b/i.test(lower.trim())) fields.comments = 'pending'
+    else if (/^(2|ninguno|nada|[-.])\b/i.test(lower.trim())) fields.comments = ''
+    else fields.comments = text.trim().slice(0, 300)
+  } else if (step === 'comment_text') {
+    if (/^(2|ninguno|nada|[-.])\b/i.test(lower.trim())) fields.comments = ''
     else fields.comments = text.trim().slice(0, 300)
   }
 
