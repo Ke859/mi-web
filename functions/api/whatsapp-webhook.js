@@ -33,7 +33,7 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  const { request, env } = context
+  const { request, env, waitUntil } = context
   try {
     const body = await request.json()
     const entry = body?.entry?.[0]
@@ -58,11 +58,11 @@ export async function onRequestPost(context) {
     }
 
     if (message.type === 'image' || message.image) {
-      await processImage(env, from, message.image?.id)
+      waitUntil(processImage(env, from, message.image?.id))
     } else if (text) {
-      await processText(env, from, text)
+      waitUntil(processText(env, from, text))
     } else {
-      await sendWhatsApp(env, from, '🙏 Solo puedo leer mensajes de texto e imágenes. Intenta otra vez.')
+      waitUntil(sendWhatsApp(env, from, '🙏 Solo puedo leer mensajes de texto e imágenes. Intenta otra vez.'))
     }
 
     return Response.json({ ok: true })
