@@ -528,7 +528,7 @@ async function continueBooking(env, from, draft, text, lower) {
     if (/^(1|s[íi]|sip|sisi|claro|dale)\b/i.test(lower.trim())) fields.lunch = 'yes'
     else if (/^(2|no|nop|nel)\b/i.test(lower.trim())) fields.lunch = 'no'
   } else if (step === 'comments') {
-    if (/^(ninguno|no|nada|[-.])\b/i.test(lower.trim())) fields.comments = null
+    if (/^(ninguno|no|nada|[-.])\b/i.test(lower.trim())) fields.comments = ''
     else fields.comments = text.trim().slice(0, 300)
   }
 
