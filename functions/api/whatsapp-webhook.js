@@ -51,7 +51,12 @@ export async function onRequestPost(context) {
     const from = message.from
     let text = message.text?.body || ''
     if (!text && message.interactive) {
+      const replyId = message.interactive.button_reply?.id || message.interactive.list_reply?.id || ''
       text = message.interactive.button_reply?.title || message.interactive.list_reply?.title || ''
+      if (replyId === 'opt-info') text = '1'
+      else if (replyId === 'opt-reservar') text = '2'
+      else if (replyId === 'opt-precio') text = '3'
+      else if (replyId === 'opt-ubicacion') text = '4'
     }
     if (!text && message.button) {
       text = message.button.text || ''
@@ -255,15 +260,22 @@ async function sendInteractiveMenu(env, to) {
     to,
     type: 'interactive',
     interactive: {
-      type: 'button',
+      type: 'list',
       header: { type: 'text', text: '🦇 ¡Hola! Bienvenido a DARKBAT.' },
-      body: { text: '¿En qué podemos ayudarte? Toca una opción 👇\n\nTambién puedes escribir: 1 Información · 2 Reservar · 3 Precio · 4 Ubicación' },
+      body: { text: '¿En qué podemos ayudarte? Toca una opción 👇' },
       footer: { text: 'DARKBAT · Visita guiada a cueva natural · Santa Sofía 🕳️' },
       action: {
-        buttons: [
-          { type: 'reply', reply: { id: 'btn-reservar', title: '📅 Reservar visita' } },
-          { type: 'reply', reply: { id: 'btn-precio', title: '💰 Precios' } },
-          { type: 'reply', reply: { id: 'btn-info', title: '🕳️ Más información' } },
+        button: 'Ver opciones',
+        sections: [
+          {
+            title: 'Opciones',
+            rows: [
+              { id: 'opt-info', title: '🕳️ Más información' },
+              { id: 'opt-reservar', title: '📅 Reservar visita' },
+              { id: 'opt-precio', title: '💰 Precios' },
+              { id: 'opt-ubicacion', title: '📍 Ubicación' },
+            ],
+          },
         ],
       },
     },
@@ -643,7 +655,7 @@ async function processText(env, from, text) {
     await resetContact(env, from)
     isNew = true
   }
-  if (isNew && /^(hola|buenas|buen[oa]s?|hey|hi|ey|saludos|ola|alo)\b/i.test(lower)) {
+  if (isNew) {
     await sendInteractiveMenu(env, from)
     return
   }
