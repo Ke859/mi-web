@@ -6,6 +6,17 @@ const PRICE = 15000
 const NEQUI = '314 459 5642'
 const t5 = (t) => String(t || '').slice(0, 5)
 
+const codeOf = (b) => b?.code || (b?.id ? `DB-${String(b.id).replace(/-/g, '').slice(0, 5).toUpperCase()}` : '')
+const statusLabel = (s) => ({
+  pending_payment: '💤 Pendiente de pago',
+  pending_confirmation: '⏳ En revisión',
+  confirmed: '✅ Confirmada',
+  approved: '✅ Confirmada',
+  rejected: '❌ Rechazada',
+  cancelled: '🚫 Cancelada',
+  completed: '🏁 Completada',
+}[s] || s)
+
 const getDepositRate = (people) => {
   if (people >= 5 && people <= 10) return 0.1
   if (people >= 11 && people <= 20) return 0.15
@@ -447,6 +458,7 @@ async function showSummary(env, from, booking) {
   const text = [
     `🦇 *RESUMEN DE TU RESERVA*`,
     ``,
+    `🎟️ Código: ${codeOf(booking)}`,
     `👤 Nombre: ${booking.name}`,
     `📧 Correo: ${booking.email}`,
     `👥 Personas: ${booking.people}`,
@@ -607,6 +619,7 @@ async function finalizeBooking(env, from, draft) {
   return sendWhatsApp(env, from, [
     `✅ ¡Reserva registrada correctamente!`,
     ``,
+    `🎟️ *Código de reserva:* ${codeOf(draft)}`,
     `🦇 *DARKBAT*`,
     `👤 ${draft.name}`,
     `📧 ${draft.email}`,
@@ -633,7 +646,7 @@ async function handleCancel(env, from) {
   }
   await updateBooking(env, booking.id, { payment_status: 'cancelled' })
   await sendTelegramCancel(env, booking)
-  return sendWhatsApp(env, from, `✅ Tu reserva del *${booking.visit_date}* a las *${String(booking.visit_time || '').slice(0, 5)}* para *${booking.people}* personas fue *cancelada*.\n\n¡Te esperamos en otra ocasión! 🦇`)
+  return sendWhatsApp(env, from, `✅ Tu reserva *${codeOf(booking)}* del *${booking.visit_date}* a las *${String(booking.visit_time || '').slice(0, 5)}* para *${booking.people}* personas fue *cancelada*.\n\n¡Te esperamos en otra ocasión! 🦇`)
 }
 
 async function processText(env, from, text) {
@@ -801,7 +814,7 @@ async function processImage(env, from, mediaId) {
         receipt_path: receiptPath || booking.receipt_path,
       })
       await sendTelegramPayment(env, booking, amount, deposit, true)
-      await sendWhatsApp(env, from, `✅ ¡Pago confirmado! *$${amount.toLocaleString('es-CO')} COP* recibidos. Tu reserva para el ${booking.visit_date} a las ${t5(booking.visit_time)} está lista. ¡Te esperamos! 🦇`)
+      await sendWhatsApp(env, from, `✅ ¡Pago confirmado! *$${amount.toLocaleString('es-CO')} COP* recibidos. Tu reserva *${codeOf(booking)}* para el ${booking.visit_date} a las ${t5(booking.visit_time)} está lista. ¡Te esperamos! 🦇`)
       return
     }
 
@@ -858,6 +871,7 @@ async function sendTelegramAlert(env, booking) {
   const message = [
     `🦇 *NUEVA RESERVA DARKBAT*`,
     ``,
+    `🎟️ *Código:* ${codeOf(booking)}`,
     `👤 *Cliente:* ${booking.name || '—'}`,
     `📧 *Correo:* ${booking.email || '—'}`,
     `📱 *WhatsApp:* ${booking.whatsapp}`,
@@ -868,7 +882,7 @@ async function sendTelegramAlert(env, booking) {
     `📝 *Comentarios:* ${booking.comments || 'Ninguno'}`,
     `💰 *Total:* $${(booking.total || 0).toLocaleString('es-CO')} COP`,
     `💳 *Abono (${Math.round(booking.depositRate * 100)}%):* $${(booking.deposit || 0).toLocaleString('es-CO')} COP`,
-    `📌 *Estado:* Confirmada por el cliente (pendiente de pago)`,
+    `📌 *Estado:* ${statusLabel(booking.payment_status || 'pending_payment')}`,
   ].join('\n')
 
   try {
@@ -885,7 +899,7 @@ async function sendTelegramAlert(env, booking) {
 async function sendTelegramCancel(env, booking) {
   const message = [
     `🚫 *RESERVA CANCELADA*`,
-    `👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
+    `🎟️ ${codeOf(booking)} · 👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
     `📅 ${booking.visit_date || '—'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} · 👥 ${booking.people || '—'} pers`,
   ].join('\n')
 
@@ -903,7 +917,7 @@ async function sendTelegramCancel(env, booking) {
 async function sendTelegramPayment(env, booking, amount, deposit, match) {
   const message = [
     `🧾 *Comprobante por WhatsApp*`,
-    `👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
+    `🎟️ ${codeOf(booking)} · 👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
     `📅 ${booking.visit_date || '—'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} · 👥 ${booking.people || '—'} pers`,
     `💰 Comprobante: $${(amount || 0).toLocaleString('es-CO')} COP`,
     `💳 Abono esperado: $${(deposit || 0).toLocaleString('es-CO')} COP`,
