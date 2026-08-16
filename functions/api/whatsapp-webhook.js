@@ -7,6 +7,7 @@ const NEQUI = '314 459 5642'
 const t5 = (t) => String(t || '').slice(0, 5)
 
 const codeOf = (b) => b?.code || (b?.id ? `DB-${String(b.id).replace(/-/g, '').slice(0, 5).toUpperCase()}` : '')
+const genCode = () => `DB-${Math.floor(10000 + Math.random() * 90000)}`
 const statusLabel = (s) => ({
   pending_payment: '💤 Pendiente de pago',
   pending_confirmation: '⏳ En revisión',
@@ -68,6 +69,7 @@ export async function onRequestPost(context) {
       else if (replyId === 'opt-reservar') text = '2'
       else if (replyId === 'opt-precio') text = '3'
       else if (replyId === 'opt-ubicacion') text = '4'
+      else if (replyId === 'opt-faq') text = '5'
     }
     if (!text && message.button) {
       text = message.button.text || ''
@@ -136,7 +138,7 @@ async function getAvailability(env) {
 async function getDraft(env, from) {
   const headers = await supabaseHeaders(env)
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/bookings?select=id,name,email,lunch,comments,whatsapp,visit_date,visit_time,people,payment_status,created_at&whatsapp=eq.${from}&${DRAFT_STATUS}&order=created_at.desc&limit=1`,
+    `${env.SUPABASE_URL}/rest/v1/bookings?select=id,code,name,email,lunch,comments,whatsapp,visit_date,visit_time,people,payment_status,created_at,source_id&whatsapp=eq.${from}&${DRAFT_STATUS}&order=created_at.desc&limit=1`,
     { headers }
   )
   if (!res.ok) return null
@@ -161,6 +163,12 @@ function parseFields(text, dates) {
     if (dates.includes(cand)) fields.visit_date = cand
   }
 
+  const ddmmyy = t.match(/(?:^|\s)(\d{1,2})\/(\d{1,2})\/(\d{4})\b/)
+  if (!fields.visit_date && ddmmyy) {
+    const cand = `${ddmmyy[3]}-${ddmmyy[2].padStart(2, '0')}-${ddmmyy[1].padStart(2, '0')}`
+    if (dates.includes(cand)) fields.visit_date = cand
+  }
+
   const low = t.toLowerCase()
   let relIdx = -1
   if (/pasado\s+ma[nñ]ana/.test(low)) relIdx = 2
@@ -181,7 +189,7 @@ function parseFields(text, dates) {
   }
   if (relIdx >= 0 && dates[relIdx]) fields.visit_date = dates[relIdx]
 
-  const peopleMatch = t.match(/(?:^|\s)(\d{1,2})(?:\s|$)/)
+  const peopleMatch = t.match(/(?:^|\s)(\d{1,2})(?=\s|$|[.,;!?](?:\s|$))/)
   if (peopleMatch) {
     const n = Number(peopleMatch[1])
     if (n >= 5 && n <= 50) fields.people = n
@@ -250,7 +258,7 @@ async function updateBooking(env, id, fields) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/bookings?id=eq.${id}`, {
     method: 'PATCH',
     headers: { ...(await supabaseHeaders(env)), 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify(fields),
+    body: JSON.stringify({ ...fields, updated_at: new Date().toISOString() }),
   })
   if (!res.ok) return null
   return (await res.json())[0] || null
@@ -285,6 +293,7 @@ async function sendInteractiveMenu(env, to) {
               { id: 'opt-reservar', title: '📅 Reservar visita' },
               { id: 'opt-precio', title: '💰 Precios' },
               { id: 'opt-ubicacion', title: '📍 Ubicación' },
+              { id: 'opt-faq', title: '❓ Preguntas frecuentes' },
             ],
           },
         ],
@@ -338,16 +347,17 @@ async function resetContact(env, waId) {
 
 async function sendMainMenu(env, from, intro) {
   const text = [
-    intro || '🦇 ¡Hola! Bienvenido a DARKBAT. 👋',
+    intro || '👋 ¡Hola! Bienvenido a DARKBAT 🦇',
     ``,
-    `Somos un sitio turístico de naturaleza ubicado en Santa Sofía, Boyacá, donde podrás disfrutar de una visita guiada a una cueva natural.`,
+    `Somos un sitio turístico de naturaleza ubicado en Santa Sofía, Boyacá.`,
     `🕐 Nuestro horario de atención es todos los días de 8:00 a. m. a 5:00 p. m.`,
     ``,
     `¿En qué podemos ayudarte?`,
     `1️⃣ 🕳️ Más información`,
-    `2️⃣ 📅 Quiero reservar`,
-    `3️⃣ 💰 Precio`,
+    `2️⃣ 📅 Reservar visita`,
+    `3️⃣ 💰 Precios`,
     `4️⃣ 📍 Ubicación`,
+    `5️⃣ ❓ Preguntas frecuentes`,
     outOfHoursNotice(),
   ].join('\n')
   return sendWhatsApp(env, from, text)
@@ -410,14 +420,67 @@ async function sendLocation(env, from) {
   return sendWhatsApp(env, from, text)
 }
 
+async function sendFAQ(env, from) {
+  const text = [
+    `❓ *Preguntas frecuentes*`,
+    ``,
+    `💰 ¿Cuánto cuesta la entrada?`,
+    `$15.000 COP por persona, incluye visita guiada a la cueva.`,
+    ``,
+    `🕐 ¿Cuál es el horario?`,
+    `Todos los días de 8:00 a. m. a 5:00 p. m.`,
+    ``,
+    `📍 ¿Dónde están ubicados?`,
+    `Santa Sofía, Boyacá, Colombia.`,
+    ``,
+    `💳 ¿Cómo pago?`,
+    `Por Nequi al *314 459 5642*. Se paga un abono según el grupo y el saldo el día de la visita.`,
+    ``,
+    `👥 ¿Cuántas personas mínimo?`,
+    `Mínimo 5 personas por reserva.`,
+    ``,
+    `📅 ¿Cómo reservo?`,
+    `Responde *2* y te guío paso a paso.`,
+    ``,
+    `✏️ ¿Puedo modificar o cancelar mi reserva?`,
+    `Sí. Escribe *"modificar"* o *"cancelar"* para gestionar tu reserva.`,
+    outOfHoursNotice(),
+  ].join('\n')
+  return sendWhatsApp(env, from, text)
+}
+
+async function sendMyBookings(env, from) {
+  const headers = await supabaseHeaders(env)
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/bookings?select=id,code,name,whatsapp,visit_date,visit_time,people,total_cop,payment_status&whatsapp=eq.${from}&payment_status=in.(pending_payment,pending_confirmation,confirmed,approved,completed)&order=created_at.desc&limit=3`,
+    { headers }
+  )
+  const rows = res.ok ? await res.json() : []
+  if (!rows.length) {
+    return sendWhatsApp(env, from, '📭 No encontré reservas a tu nombre.\n\nSi quieres visitarnos, responde *2* para reservar. 🦇')
+  }
+  const lines = rows.map((b) =>
+    [
+      `🎫 *${codeOf(b)}*`,
+      `👤 ${b.name}`,
+      `👥 ${b.people} personas`,
+      `📅 ${b.visit_date}`,
+      `🕐 ${t5(b.visit_time)}`,
+      `💰 $${(b.total_cop || 0).toLocaleString('es-CO')} COP`,
+      `📌 ${statusLabel(b.payment_status)}`,
+    ].join('\n')
+  )
+  return sendWhatsApp(env, from, `📋 *Tus reservas en DARKBAT*:\n\n${lines.join('\n\n')}\n\n✏️ Para modificar escribe *"modificar"* · 🚫 Para cancelar escribe *"cancelar"*`)
+}
+
 async function askNext(env, from, booking, usage) {
   if (!booking.name) {
-    return sendWhatsApp(env, from, '🦇 ¡Perfecto! Vamos a realizar tu reserva.\n\nPrimero, ¿cuál es tu nombre?')
+    return sendWhatsApp(env, from, '🦇 ¡Perfecto! Vamos a realizar tu reserva.\n\nPrimero, ¿cuál es tu nombre completo?')
   }
   if (!booking.email || booking.email.startsWith('wa-')) {
     return sendWhatsApp(env, from, '📧 ¿Cuál es tu correo electrónico?\n(Ej: correo@ejemplo.com)')
   }
-  if (!booking.people) {
+  if (!booking.people || booking.people < 5 || booking.people > 50) {
     return sendWhatsApp(env, from, '👥 ¿Cuántas personas asistirán?\n(Mínimo 5, máximo 50)')
   }
   if (!booking.visit_date) {
@@ -455,8 +518,9 @@ async function askNext(env, from, booking, usage) {
 async function showSummary(env, from, booking) {
   const total = booking.people * PRICE
   await updateBooking(env, booking.id, { payment_status: 'awaiting_confirm' })
+  const title = booking.source_id ? '✏️ *RESUMEN DE TUS CAMBIOS*' : '🦇 *RESUMEN DE TU RESERVA*'
   const text = [
-    `🦇 *RESUMEN DE TU RESERVA*`,
+    title,
     ``,
     `🎟️ Código: ${codeOf(booking)}`,
     `👤 Nombre: ${booking.name}`,
@@ -471,6 +535,7 @@ async function showSummary(env, from, booking) {
     `¿Los datos son correctos?`,
     `1️⃣ ✅ Confirmar`,
     `2️⃣ ✏️ Modificar`,
+    `3️⃣ ❌ Cancelar`,
   ].join('\n')
   return sendWhatsApp(env, from, text)
 }
@@ -485,6 +550,7 @@ async function startBooking(env, from, text) {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
     body: JSON.stringify({
+      code: genCode(),
       name: fields.name || null,
       whatsapp: from,
       email: fields.email || `wa-${from}@darkbat.local`,
@@ -492,6 +558,7 @@ async function startBooking(env, from, text) {
       visit_time: fields.visit_time || null,
       people: fields.people || null,
       lunch: fields.lunch || null,
+      price_per_cop: PRICE,
       payment_status: 'draft',
     }),
   })
@@ -501,6 +568,46 @@ async function startBooking(env, from, text) {
 }
 
 async function continueBooking(env, from, draft, text, lower) {
+  const { days, usage } = await getAvailability(env)
+  const dates = days.map((l) => l.split(':')[0])
+
+  if (draft.comments === '@cancel-confirm') {
+    if (/^(1|s[íi]|sip|sisi|claro|dale|ok|listo|confirmo)\b/i.test(lower.trim())) {
+      const originalId = draft.source_id || draft.id
+      const booking = await updateBooking(env, originalId, { payment_status: 'cancelled' })
+      await deleteBooking(env, draft.id)
+      if (booking) await sendTelegramCancel(env, booking)
+      return sendWhatsApp(env, from, `✅ Tu reserva *${codeOf(booking || draft)}* fue cancelada.\n\n¡Te esperamos en otra ocasión! 🦇`)
+    }
+    if (/^(2|no|nel|nop|nada)\b/i.test(lower.trim())) {
+      await deleteBooking(env, draft.id)
+      return sendWhatsApp(env, from, 'Perfecto, tu reserva sigue activa. 😊 ¿En qué más te ayudo?')
+    }
+    return sendWhatsApp(env, from, '⚠️ ¿Estás seguro de que quieres cancelar esta reserva?\n\n1️⃣ Sí, cancelar\n2️⃣ No')
+  }
+
+  if (draft.source_id && draft.payment_status === 'draft' && String(draft.comments || '').startsWith('{')) {
+    let marker = null
+    try {
+      marker = JSON.parse(draft.comments)
+    } catch {
+      marker = null
+    }
+    if (marker?.m === 'modify') {
+      const opt = { 1: 'visit_date', 2: 'visit_time', 3: 'people' }[lower.trim()]
+      if (opt) {
+        await updateBooking(env, draft.id, { [opt]: null, comments: marker.c || '' })
+        const updated = { ...draft, [opt]: null, comments: marker.c || '' }
+        return askNext(env, from, updated, usage)
+      }
+      if (/^(no|volver|men[uú]|nada)\b/i.test(lower.trim())) {
+        await deleteBooking(env, draft.id)
+        return sendWhatsApp(env, from, 'Listo, tu reserva no fue modificada. 😊')
+      }
+      return sendWhatsApp(env, from, '✏️ ¿Qué deseas modificar?\n\n1️⃣ Fecha\n2️⃣ Hora\n3️⃣ Cantidad de personas')
+    }
+  }
+
   if (/^(no|nel|nop|nada)\b/i.test(lower.trim())) {
     await deleteBooking(env, draft.id)
     return sendWhatsApp(env, from, 'Listo, cancelamos el proceso. 😊 ¿En qué más te ayudo?')
@@ -525,16 +632,22 @@ async function continueBooking(env, from, draft, text, lower) {
     return sendInfo(env, from)
   }
 
-  const { days, usage } = await getAvailability(env)
-  const dates = days.map((l) => l.split(':')[0])
-
   if (draft.payment_status === 'awaiting_confirm') {
+    if (draft.source_id && /^(2|modificar|modific)\b/i.test(lower.trim())) {
+      await updateBooking(env, draft.id, { comments: JSON.stringify({ m: 'modify', c: draft.comments || '' }), payment_status: 'draft' })
+      return sendWhatsApp(env, from, '✏️ ¿Qué deseas modificar?\n\n1️⃣ Fecha\n2️⃣ Hora\n3️⃣ Cantidad de personas')
+    }
     if (draft.comments === 'modify' && /^([1-7])$/.test(lower.trim())) {
       const field = ['name', 'people', 'visit_date', 'visit_time', 'email', 'lunch', 'comments'][Number(lower.trim()) - 1]
       const clear = field === 'email' ? `wa-${from}@darkbat.local` : null
       await updateBooking(env, draft.id, { [field]: clear, payment_status: 'draft', comments: null })
       const updated = { ...draft, [field]: clear, payment_status: 'draft' }
       return askNext(env, from, updated, usage)
+    }
+    if (/^3\b/.test(lower.trim()) || /cancelar|cancelaci|anular/i.test(lower)) {
+      await deleteBooking(env, draft.id)
+      if (draft.source_id) return sendWhatsApp(env, from, 'Listo, tu reserva no fue modificada. 😊')
+      return sendWhatsApp(env, from, 'Listo, cancelamos el proceso de reserva. 😊 ¿En qué más te ayudo?')
     }
     if (/^(2|modificar|modific)\b/i.test(lower.trim())) {
       await updateBooking(env, draft.id, { comments: 'modify' })
@@ -583,6 +696,9 @@ async function continueBooking(env, from, draft, text, lower) {
 
   if (!Object.keys(fields).length) {
     if (draft.payment_status === 'awaiting_confirm') return showSummary(env, from, draft)
+    if (!draft.visit_date) return sendWhatsApp(env, from, '⚠️ No pude reconocer esa fecha. Por favor, escribe una fecha como: 25/08/2026')
+    if (!draft.visit_time) return sendWhatsApp(env, from, '🕐 Por favor, indica una hora entre 8:00 a. m. y 5:00 p. m.\n(Ej: 10:00)')
+    if (!draft.people) return sendWhatsApp(env, from, '👥 Por favor, indica cuántas personas asistirán.\n(Mínimo 5, máximo 50)')
     return askNext(env, from, draft, usage)
   }
 
@@ -602,8 +718,42 @@ async function finalizeBooking(env, from, draft) {
   const { usage } = await getAvailability(env)
   if ((usage[`${draft.visit_date}|${t5(draft.visit_time)}`] || 0) + draft.people > SLOT_CAPACITY) {
     const free = freeSlots(usage, draft.visit_date, draft.people)
-    await updateBooking(env, draft.id, { visit_time: null, payment_status: 'draft', comments: null })
+    await updateBooking(env, draft.id, { visit_time: null, payment_status: 'draft', comments: draft.comments || null })
     return sendWhatsApp(env, from, `😅 Ese horario se acaba de llenar. Estos siguen libres: ${free.length ? free.join(', ') : 'otro día'}.\n¿A qué hora prefieres?`)
+  }
+
+  if (draft.source_id) {
+    const total = draft.people * PRICE
+    const rate = getDepositRate(draft.people)
+    const deposit = Math.round(total * rate)
+    const updated = await updateBooking(env, draft.source_id, {
+      name: draft.name,
+      email: draft.email,
+      visit_date: draft.visit_date,
+      visit_time: draft.visit_time,
+      people: draft.people,
+      lunch: draft.lunch,
+      comments: draft.comments || null,
+      total_cop: total,
+      deposit_rate: rate,
+      deposit_cop: deposit,
+      price_per_cop: PRICE,
+    })
+    await deleteBooking(env, draft.id)
+    if (updated) await sendTelegramModify(env, { ...updated, source: 'bot' })
+    return sendWhatsApp(env, from, [
+      `✅ ¡Tu reserva fue modificada correctamente!`,
+      ``,
+      `🦇 *DARKBAT*`,
+      `🎟️ Código: ${codeOf(updated || draft)}`,
+      `👤 ${draft.name}`,
+      `👥 ${draft.people} personas`,
+      `📅 ${draft.visit_date}`,
+      `🕐 ${t5(draft.visit_time)}`,
+      `💰 Total: $${total.toLocaleString('es-CO')} COP`,
+      ``,
+      `¡Te esperamos en DARKBAT! 🦇`,
+    ].join('\n'))
   }
 
   const total = draft.people * PRICE
@@ -634,19 +784,68 @@ async function finalizeBooking(env, from, draft) {
   ].join('\n'))
 }
 
-async function handleCancel(env, from) {
+async function startModify(env, from) {
   const headers = await supabaseHeaders(env)
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/bookings?select=id,name,whatsapp,visit_date,visit_time,people&whatsapp=eq.${from}&payment_status=in.(pending_payment,pending_confirmation,confirmed,approved)&order=created_at.desc&limit=1`,
+    `${env.SUPABASE_URL}/rest/v1/bookings?select=id,name,email,lunch,comments,whatsapp,visit_date,visit_time,people,code&whatsapp=eq.${from}&payment_status=in.(pending_payment,pending_confirmation,confirmed,approved)&order=created_at.desc&limit=1`,
     { headers }
   )
   const booking = res.ok ? (await res.json())[0] : null
   if (!booking) {
     return sendWhatsApp(env, from, '⚠️ No encontré reservas activas a tu nombre. Si quieres visitarnos, responde *2* para reservar. 🦇')
   }
-  await updateBooking(env, booking.id, { payment_status: 'cancelled' })
-  await sendTelegramCancel(env, booking)
-  return sendWhatsApp(env, from, `✅ Tu reserva *${codeOf(booking)}* del *${booking.visit_date}* a las *${String(booking.visit_time || '').slice(0, 5)}* para *${booking.people}* personas fue *cancelada*.\n\n¡Te esperamos en otra ocasión! 🦇`)
+  const create = await fetch(`${env.SUPABASE_URL}/rest/v1/bookings`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({
+      code: booking.code,
+      name: booking.name,
+      email: booking.email,
+      whatsapp: from,
+      visit_date: booking.visit_date,
+      visit_time: booking.visit_time,
+      people: booking.people,
+      lunch: booking.lunch,
+      comments: JSON.stringify({ m: 'modify', c: booking.comments || '' }),
+      price_per_cop: PRICE,
+      payment_status: 'draft',
+      source_id: booking.id,
+    }),
+  })
+  if (!create.ok) return sendWhatsApp(env, from, '😢 Hubo un problema iniciando la modificación. Intenta de nuevo.')
+  return sendWhatsApp(env, from, `✏️ Tu reserva *${codeOf(booking)}* del *${booking.visit_date}* a las *${String(booking.visit_time || '').slice(0, 5)}*.\n\n¿Qué deseas modificar?\n\n1️⃣ Fecha\n2️⃣ Hora\n3️⃣ Cantidad de personas`)
+}
+
+async function handleCancel(env, from) {
+  const headers = await supabaseHeaders(env)
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/bookings?select=id,name,email,lunch,comments,whatsapp,visit_date,visit_time,people,code&whatsapp=eq.${from}&payment_status=in.(pending_payment,pending_confirmation,confirmed,approved)&order=created_at.desc&limit=1`,
+    { headers }
+  )
+  const booking = res.ok ? (await res.json())[0] : null
+  if (!booking) {
+    return sendWhatsApp(env, from, '⚠️ No encontré reservas activas a tu nombre. Si quieres visitarnos, responde *2* para reservar. 🦇')
+  }
+  const create = await fetch(`${env.SUPABASE_URL}/rest/v1/bookings`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({
+      code: booking.code,
+      name: booking.name,
+      email: booking.email,
+      whatsapp: from,
+      visit_date: booking.visit_date,
+      visit_time: booking.visit_time,
+      people: booking.people,
+      lunch: booking.lunch,
+      comments: '@cancel-confirm',
+      price_per_cop: PRICE,
+      payment_status: 'draft',
+      source_id: booking.id,
+    }),
+  })
+  if (!create.ok) return sendWhatsApp(env, from, '😢 Hubo un problema procesando tu solicitud. Intenta de nuevo.')
+  return sendWhatsApp(env, from, `⚠️ ¿Estás seguro de que quieres cancelar esta reserva?\n\n🎫 *${codeOf(booking)}*\n👤 ${booking.name}\n👥 ${booking.people} personas\n📅 ${booking.visit_date} · 🕐 ${String(booking.visit_time || '').slice(0, 5)}\n\n1️⃣ Sí, cancelar\n2️⃣ No`)
 }
 
 async function processText(env, from, text) {
@@ -674,6 +873,15 @@ async function processText(env, from, text) {
   }
 
   if (/(cancelar|cancelaci|anular)/i.test(lower)) return handleCancel(env, from)
+  if (/modificar mi reserva|quiero cambiar|cambiar la fecha|cambiar la hora|cambiar el d[ií]a|cambiar las personas|cambiar mi reserva|actualizar mi reserva|modificar/i.test(lower)) {
+    return startModify(env, from)
+  }
+  if (/mi reserva|consultar|ver mi reserva|cu[aá]l es mi reserva|estado de mi reserva|como est[aá] mi reserva|c[oó]mo est[aá] mi reserva/i.test(lower)) {
+    return sendMyBookings(env, from)
+  }
+  if (/^(5|faq|preguntas?)\b/.test(lower) || /^5$/.test(lower)) {
+    return sendFAQ(env, from)
+  }
   if (/^(buenas|hola|buen|ayuda|ayudame|info\b|infor)/i.test(lower) || /^(volver|men[uú]|1)\b/.test(lower) || /^1$/.test(lower)) {
     if (/^(1|info)/i.test(lower)) return sendInfo(env, from)
     return sendMainMenu(env, from)
@@ -867,6 +1075,15 @@ async function sendWhatsAppPayload(env, to, body) {
   return res
 }
 
+async function notifyAdminWhatsApp(env, text) {
+  if (!env.ADMIN_WHATSAPP_NUMBER) return
+  try {
+    await sendWhatsApp(env, env.ADMIN_WHATSAPP_NUMBER, text)
+  } catch (e) {
+    console.error('Admin WhatsApp notify error', e)
+  }
+}
+
 async function sendTelegramAlert(env, booking) {
   const message = [
     `🦇 *NUEVA RESERVA DARKBAT*`,
@@ -894,6 +1111,17 @@ async function sendTelegramAlert(env, booking) {
   } catch (e) {
     console.error('Telegram alert error', e)
   }
+  await notifyAdminWhatsApp(env, [
+    `🦇 NUEVA RESERVA`,
+    `🎫 ID: ${codeOf(booking)}`,
+    `👤 Cliente: ${booking.name || '—'}`,
+    `📱 WhatsApp: ${booking.whatsapp}`,
+    `👥 Personas: ${booking.people || '—'}`,
+    `📅 Fecha: ${booking.visit_date || '—'}`,
+    `🕐 Hora: ${t5(booking.visit_time) || '—'}`,
+    `💰 Total: $${(booking.total || 0).toLocaleString('es-CO')} COP`,
+    `📌 Estado: ${statusLabel(booking.payment_status || 'pending_payment')}`,
+  ].join('\n'))
 }
 
 async function sendTelegramCancel(env, booking) {
@@ -910,8 +1138,29 @@ async function sendTelegramCancel(env, booking) {
       body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: message }),
     })
   } catch (e) {
-    console.error('Telegram alert error', e)
+    console.error('Telegram cancel alert error', e)
   }
+  await notifyAdminWhatsApp(env, message.replace(/\*/g, ''))
+}
+
+async function sendTelegramModify(env, booking) {
+  const message = [
+    `✏️ *RESERVA MODIFICADA*`,
+    `🎟️ ${codeOf(booking)} · 👤 ${booking.name || '—'} · 📱 ${booking.whatsapp}`,
+    `📅 ${booking.visit_date || '—'} ${booking.visit_time ? `a las ${String(booking.visit_time).slice(0, 5)}` : ''} · 👥 ${booking.people || '—'} pers`,
+    `💰 Total: $${(booking.total_cop || 0).toLocaleString('es-CO')} COP`,
+  ].join('\n')
+
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: message }),
+    })
+  } catch (e) {
+    console.error('Telegram modify alert error', e)
+  }
+  await notifyAdminWhatsApp(env, message.replace(/\*/g, ''))
 }
 
 async function sendTelegramPayment(env, booking, amount, deposit, match) {
@@ -931,6 +1180,7 @@ async function sendTelegramPayment(env, booking, amount, deposit, match) {
       body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: message }),
     })
   } catch (e) {
-    console.error('Telegram alert error', e)
+    console.error('Telegram payment alert error', e)
   }
+  await notifyAdminWhatsApp(env, message.replace(/\*/g, ''))
 }

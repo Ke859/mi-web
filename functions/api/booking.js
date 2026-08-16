@@ -7,6 +7,10 @@ const getDepositRate = (people) => {
   return 0.1
 }
 
+const PRICE = 15000
+const genCode = () => `DB-${Math.floor(10000 + Math.random() * 90000)}`
+const codeOf = (b) => b?.code || (b?.id ? `DB-${String(b.id).replace(/-/g, '').slice(0, 5).toUpperCase()}` : '')
+
 export async function onRequestPost(context) {
   const { request, env } = context
   try {
@@ -29,7 +33,7 @@ export async function onRequestPost(context) {
     if (!/^\d{2}:\d{2}$/.test(time || '') || time < '08:00' || time > '17:00') return Response.json({ error: 'Hora fuera del horario (8:00 a 17:00)' }, { status: 400 })
     if (!people || people < 5 || people > 50) return Response.json({ error: 'Personas entre 5 y 50' }, { status: 400 })
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date())
     if (date < today) return Response.json({ error: 'La fecha ya pasó' }, { status: 400 })
 
     const capacity = await checkCapacity(env, date, time, people)
@@ -40,14 +44,14 @@ export async function onRequestPost(context) {
       }, { status: 409 })
     }
 
-    const total = people * 15000
+    const total = people * PRICE
     const depositRate = getDepositRate(people)
     const deposit = Math.round(total * depositRate)
     const paymentStatus = receiptPath ? 'pending_confirmation' : 'pending_payment'
 
     const { data, error } = await supabaseRequest(env, {
-      name, email, whatsapp, visit_date: date, visit_time: time, people,
-      lunch, comments, total_cop: total, deposit_rate: depositRate, deposit_cop: deposit,
+      code: genCode(), name, email, whatsapp, visit_date: date, visit_time: time, people,
+      lunch, comments, total_cop: total, price_per_cop: PRICE, deposit_rate: depositRate, deposit_cop: deposit,
       receipt_path: receiptPath, payment_status: paymentStatus,
     })
 
@@ -57,14 +61,15 @@ export async function onRequestPost(context) {
     }
 
     const bookingId = data?.[0]?.id || null
+    const bookingCode = codeOf(data?.[0] || { id: bookingId, code: genCode() })
     if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
       await sendTelegramAlert(env, {
-        id: bookingId, name, email, whatsapp, date, time, people,
+        id: bookingId, code: bookingCode, name, email, whatsapp, date, time, people,
         lunch, comments, total, deposit, depositRate, receiptPath, source,
       })
     }
 
-    return Response.json({ ok: true, id: bookingId })
+    return Response.json({ ok: true, id: bookingId, code: bookingCode })
   } catch (e) {
     console.error('booking function error', e)
     return Response.json({ error: 'Error interno.' }, { status: 500 })
@@ -76,6 +81,7 @@ async function sendTelegramAlert(env, booking) {
   const message = [
     `🦇 *Nueva reserva DARKBAT*`,
     ``,
+    `🎟️ *Código:* ${codeOf(booking)}`,
     `📱 *Origen:* ${booking.source === 'bot' ? 'Asistente IA 🤖' : 'Formulario web'}`,
     `👤 *Nombre:* ${booking.name}`,
     `📧 *Correo:* ${booking.email}`,
@@ -98,6 +104,34 @@ async function sendTelegramAlert(env, booking) {
     })
   } catch (e) {
     console.error('Telegram alert error', e)
+  }
+  if (env.ADMIN_WHATSAPP_NUMBER) {
+    const adminMsg = [
+      `🦇 NUEVA RESERVA`,
+      `🎫 ID: ${codeOf(booking)}`,
+      `👤 Cliente: ${booking.name}`,
+      `📱 WhatsApp: ${booking.whatsapp}`,
+      `👥 Personas: ${booking.people}`,
+      `📅 Fecha: ${booking.date}`,
+      `🕐 Hora: ${booking.time}`,
+      `💰 Total: $${booking.total.toLocaleString('es-CO')} COP`,
+      `📌 Estado: ${booking.payment_status === 'pending_confirmation' ? 'En revisión' : 'Pendiente de pago'}`,
+    ].join('\n')
+    try {
+      await fetch(`https://graph.facebook.com/v21.0/${env.WHATSAPP_PHONE_ID}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}` },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: env.ADMIN_WHATSAPP_NUMBER,
+          type: 'text',
+          text: { body: adminMsg },
+        }),
+      })
+    } catch (e) {
+      console.error('Admin WhatsApp notify error', e)
+    }
   }
 }
 

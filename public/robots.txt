@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://darkbat-web.pages.dev/sitemap.xml

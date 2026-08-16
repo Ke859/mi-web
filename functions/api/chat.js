@@ -1,10 +1,9 @@
 function buildSystemPrompt() {
-  const now = new Date()
-  const hoy = now.toISOString().split('T')[0]
+  const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date())
   const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
   const refs = {}
   refs.hoy = hoy
-  refs.mañana = refs.mañana = addDaysIso(hoy, 1)
+  refs.mañana = addDaysIso(hoy, 1)
   refs.PAS = addDaysIso(hoy, 2)
   for (let i = 1; i <= 7; i++) {
     const d = addDaysIso(hoy, i)
@@ -44,7 +43,7 @@ export async function onRequestPost(context) {
 
     let availability = ''
     if (bookingIntent) {
-      const today = new Date().toISOString().split('T')[0]
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date())
       const avail = await getAvailability(env, today, 7)
       if (avail) {
         availability = `

@@ -1,5 +1,6 @@
 create table public.bookings (
   id uuid primary key default gen_random_uuid(),
+  code text,
   name text not null,
   email text not null,
   whatsapp text not null,
@@ -10,12 +11,15 @@ create table public.bookings (
     check (lunch in ('yes', 'no')),
   comments text,
   total_cop integer not null check (total_cop > 0),
+  price_per_cop integer,
   deposit_rate numeric not null default 0.10,
   deposit_cop integer not null default 0,
   receipt_path text not null,
   payment_status text not null default 'pending_confirmation'
-    check (payment_status in ('pending_confirmation', 'approved', 'rejected')),
-  created_at timestamptz not null default now()
+    check (payment_status in ('pending_confirmation', 'approved', 'rejected', 'pending_payment', 'confirmed', 'cancelled', 'completed', 'draft', 'awaiting_confirm')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz default now(),
+  source_id uuid
 );
 
 alter table public.bookings enable row level security;

@@ -2,6 +2,3 @@ name = "darkbat-scheduler"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 workers_dev = false
-
-[triggers]
-crons = ["0 12 * * *"]

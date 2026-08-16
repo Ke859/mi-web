@@ -4,6 +4,7 @@ import { Lock, LogOut, X, RefreshCw, Eye, Download, Users, CalendarDays, Clock, 
 
 interface Booking {
   id: string
+  code?: string | null
   name: string
   email: string
   whatsapp: string
@@ -17,7 +18,10 @@ interface Booking {
   payment_status: string
   receipt_path: string
   created_at: string
+  updated_at?: string | null
 }
+
+const bookingCode = (b: Booking) => b.code || `DB-${b.id.replace(/-/g, '').slice(0, 5).toUpperCase()}`
 
 const statusMap: Record<string, { label: string; color: string }> = {
   pending_payment: { label: 'Pendiente de pago', color: 'bg-sky-500/15 text-sky-300 border-sky-500/30' },
@@ -43,8 +47,22 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   const [verifyResult, setVerifyResult] = useState<Record<string, { monto: string; coincide: boolean; esComprobante: boolean; detalle: string }>>({})
   const [describeResult, setDescribeResult] = useState<Record<string, { descripcion: string; loading: boolean }>>({})
   const [sendingSummary, setSendingSummary] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterDate, setFilterDate] = useState('')
 
   const adminHeaders = () => ({ 'Content-Type': 'application/json', 'x-admin-password': sessionStorage.getItem('darkbat_admin') || '' })
+
+  const filteredBookings = (bookings || []).filter((b) => {
+    const q = search.trim().toLowerCase()
+    if (q) {
+      const haystack = `${b.name} ${b.whatsapp} ${b.id} ${bookingCode(b)} ${b.email}`.toLowerCase()
+      if (!haystack.includes(q)) return false
+    }
+    if (filterStatus && b.payment_status !== filterStatus) return false
+    if (filterDate && b.visit_date !== filterDate) return false
+    return true
+  })
 
   const loadBookings = useCallback(async () => {
     setLoading(true)
@@ -260,10 +278,11 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
               </form>
             ) : (
               <div className="flex-1 overflow-y-auto p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-2 text-sm text-stone-400">
                     <Users className="w-4 h-4 text-gold-300" />
-                    <span className="text-white font-semibold">{bookings.length}</span> reservas
+                    <span className="text-white font-semibold">{filteredBookings.length}</span> reservas
+                    {filteredBookings.length !== bookings.length && <span className="text-stone-500">de {bookings.length}</span>}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={sendDailySummary} disabled={sendingSummary} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/10 border border-teal-500/30 text-xs text-teal-300 hover:bg-teal-500/20 transition-all disabled:opacity-50">
@@ -280,13 +299,40 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
                 {loadError && <p className="mb-4 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">{loadError}</p>}
 
+                <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="🔎 Buscar por nombre, WhatsApp, ID o código..."
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-stone-600 focus:outline-none focus:ring-2 focus:ring-gold-500/40"
+                  />
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-stone-300 focus:outline-none focus:ring-2 focus:ring-gold-500/40"
+                  >
+                    <option value="">📌 Todos los estados</option>
+                    {Object.entries(statusMap).map(([k, v]) => (
+                      <option key={k} value={k} className="bg-deep-900">{v.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="date"
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-stone-300 focus:outline-none focus:ring-2 focus:ring-gold-500/40 [color-scheme:dark]"
+                  />
+                </div>
+
                 {loading ? (
                   <p className="text-center text-sm text-stone-500 py-12">Cargando reservas...</p>
                 ) : bookings.length === 0 ? (
                   <p className="text-center text-sm text-stone-500 py-12">Aún no hay reservas.</p>
+                ) : filteredBookings.length === 0 ? (
+                  <p className="text-center text-sm text-stone-500 py-12">No hay reservas que coincidan con la búsqueda.</p>
                 ) : (
                   <div className="space-y-3">
-                    {bookings.map((booking) => {
+                    {filteredBookings.map((booking) => {
                       const status = statusMap[booking.payment_status] || { label: booking.payment_status, color: 'bg-white/5 text-stone-300 border-white/10' }
 
   return (
@@ -294,6 +340,7 @@ export function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <p className="text-white font-semibold">{booking.name} <span className="ml-1 text-xs text-stone-500">{booking.email}</span></p>
+                              <p className="text-xs text-gold-300 font-semibold mt-1">🎫 {bookingCode(booking)}</p>
                               <p className="text-xs text-stone-400 mt-1 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" />{booking.visit_date} · <Clock className="w-3.5 h-3.5" />{booking.visit_time} · <Users className="w-3.5 h-3.5" />{booking.people} pers · 🍽️ {booking.lunch === 'yes' ? 'Almuerzo' : 'Sin almuerzo'}</p>
                               <p className="text-xs text-stone-500 mt-1">WhatsApp: {booking.whatsapp} {booking.comments ? `· Comentarios: ${booking.comments}` : ''}</p>
                             </div>

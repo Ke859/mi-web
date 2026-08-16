@@ -1,20 +1,24 @@
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runSummary())
+    ctx.waitUntil(runDaily())
   },
 
   async fetch(_request) {
-    const result = await runSummary()
+    const result = await runDaily()
     return Response.json(result)
   },
 }
 
-async function runSummary() {
-  try {
-    const resp = await fetch('https://darkbat-web.pages.dev/api/daily-summary', { method: 'POST' })
-    const data = await resp.json()
-    return { ok: true, status: resp.status, data }
-  } catch (e) {
-    return { ok: false, error: e.message }
+async function runDaily() {
+  const results = []
+  for (const path of ['api/daily-summary', 'api/reminders']) {
+    try {
+      const resp = await fetch(`https://darkbat-web.pages.dev/${path}`, { method: 'POST' })
+      const data = await resp.json()
+      results.push({ path, ok: resp.ok, status: resp.status, data })
+    } catch (e) {
+      results.push({ path, ok: false, error: e.message })
+    }
   }
+  return { ok: true, results }
 }

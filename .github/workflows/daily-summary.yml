@@ -11,6 +11,15 @@ jobs:
     steps:
       - name: Enviar resumen del día a Telegram
         run: |
-          RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST https://darkbat-web.pages.dev/api/daily-summary)
+          URL="https://darkbat-web.pages.dev/api/daily-summary"
+          if [ -n "${{ secrets.DAILY_SUMMARY_KEY }}" ]; then URL="$URL?key=${{ secrets.DAILY_SUMMARY_KEY }}"; fi
+          RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL")
           echo "daily-summary HTTP $RESP"
+          if [ "$RESP" != "200" ]; then exit 1; fi
+      - name: Enviar recordatorios de visitas de mañana
+        run: |
+          URL="https://darkbat-web.pages.dev/api/reminders"
+          if [ -n "${{ secrets.DAILY_SUMMARY_KEY }}" ]; then URL="$URL?key=${{ secrets.DAILY_SUMMARY_KEY }}"; fi
+          RESP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL")
+          echo "reminders HTTP $RESP"
           if [ "$RESP" != "200" ]; then exit 1; fi
