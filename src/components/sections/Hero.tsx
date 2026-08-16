@@ -86,7 +86,7 @@ export function Hero() {
           className="absolute bottom-8 left-1/2 -translate-x-1/2"
         >
           <motion.button
-            onClick={() => scrollTo('#about')}
+            onClick={() => scrollTo('#gallery')}
             animate={{ y: [0, 8, 0] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             className="text-stone-500 hover:text-stone-300 transition-colors"

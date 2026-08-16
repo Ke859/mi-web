@@ -6,7 +6,6 @@ import { ScrollProgress } from './components/effects/ScrollProgress'
 import { Navbar } from './components/layout/Navbar'
 import { Footer } from './components/layout/Footer'
 import { Hero } from './components/sections/Hero'
-import { About } from './components/sections/About'
 import { Gallery } from './components/sections/Gallery'
 import { Booking } from './components/sections/Booking'
 import { Testimonials } from './components/sections/Testimonials'
@@ -43,7 +42,6 @@ export default function App() {
       <Navbar />
       <main>
         <Hero />
-        <About />
         <Gallery />
         <Booking />
         <Testimonials />

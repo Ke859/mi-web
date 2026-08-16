@@ -2,7 +2,6 @@ import type { GalleryImage } from '../types'
 
 export const navLinks = [
   { label: 'Inicio', href: '#hero' },
-  { label: 'La Cueva', href: '#about' },
   { label: 'Galería', href: '#gallery' },
   { label: 'Reservar', href: '#booking' },
   { label: 'Contacto', href: '#footer' },
