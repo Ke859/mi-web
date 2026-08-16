@@ -69,7 +69,6 @@ export async function onRequestPost(context) {
       else if (replyId === 'opt-reservar') text = '2'
       else if (replyId === 'opt-precio') text = '3'
       else if (replyId === 'opt-ubicacion') text = '4'
-      else if (replyId === 'opt-faq') text = '5'
     }
     if (!text && message.button) {
       text = message.button.text || ''
@@ -293,7 +292,6 @@ async function sendInteractiveMenu(env, to) {
               { id: 'opt-reservar', title: '📅 Reservar visita' },
               { id: 'opt-precio', title: '💰 Precios' },
               { id: 'opt-ubicacion', title: '📍 Ubicación' },
-              { id: 'opt-faq', title: '❓ Preguntas frecuentes' },
             ],
           },
         ],
@@ -357,7 +355,6 @@ async function sendMainMenu(env, from, intro) {
     `2️⃣ 📅 Reservar visita`,
     `3️⃣ 💰 Precios`,
     `4️⃣ 📍 Ubicación`,
-    `5️⃣ ❓ Preguntas frecuentes`,
     outOfHoursNotice(),
   ].join('\n')
   return sendWhatsApp(env, from, text)
@@ -415,35 +412,6 @@ async function sendLocation(env, from) {
   const text = [
     `📍 DARKBAT se encuentra en *Santa Sofía, Boyacá, Colombia*. 🦇`,
     `🕐 Nuestro horario de atención es de 8:00 a. m. a 5:00 p. m.`,
-    outOfHoursNotice(),
-  ].join('\n')
-  return sendWhatsApp(env, from, text)
-}
-
-async function sendFAQ(env, from) {
-  const text = [
-    `❓ *Preguntas frecuentes*`,
-    ``,
-    `💰 ¿Cuánto cuesta la entrada?`,
-    `$15.000 COP por persona, incluye visita guiada a la cueva.`,
-    ``,
-    `🕐 ¿Cuál es el horario?`,
-    `Todos los días de 8:00 a. m. a 5:00 p. m.`,
-    ``,
-    `📍 ¿Dónde están ubicados?`,
-    `Santa Sofía, Boyacá, Colombia.`,
-    ``,
-    `💳 ¿Cómo pago?`,
-    `Por Nequi al *314 459 5642*. Se paga un abono según el grupo y el saldo el día de la visita.`,
-    ``,
-    `👥 ¿Cuántas personas mínimo?`,
-    `Mínimo 5 personas por reserva.`,
-    ``,
-    `📅 ¿Cómo reservo?`,
-    `Responde *2* y te guío paso a paso.`,
-    ``,
-    `✏️ ¿Puedo modificar o cancelar mi reserva?`,
-    `Sí. Escribe *"modificar"* o *"cancelar"* para gestionar tu reserva.`,
     outOfHoursNotice(),
   ].join('\n')
   return sendWhatsApp(env, from, text)
@@ -878,9 +846,6 @@ async function processText(env, from, text) {
   }
   if (/mi reserva|consultar|ver mi reserva|cu[aá]l es mi reserva|estado de mi reserva|como est[aá] mi reserva|c[oó]mo est[aá] mi reserva/i.test(lower)) {
     return sendMyBookings(env, from)
-  }
-  if (/^(5|faq|preguntas?)\b/.test(lower) || /^5$/.test(lower)) {
-    return sendFAQ(env, from)
   }
   if (/^(buenas|hola|buen|ayuda|ayudame|info\b|infor)/i.test(lower) || /^(volver|men[uú]|1)\b/.test(lower) || /^1$/.test(lower)) {
     if (/^(1|info)/i.test(lower)) return sendInfo(env, from)
