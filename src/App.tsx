@@ -6,9 +6,12 @@ import { ScrollProgress } from './components/effects/ScrollProgress'
 import { Navbar } from './components/layout/Navbar'
 import { Footer } from './components/layout/Footer'
 import { Hero } from './components/sections/Hero'
+import { About } from './components/sections/About'
+import { Experience } from './components/sections/Experience'
 import { Gallery } from './components/sections/Gallery'
 import { Booking } from './components/sections/Booking'
 import { Testimonials } from './components/sections/Testimonials'
+import { FAQ } from './components/sections/FAQ'
 import { Location } from './components/sections/Location'
 import { WhatsAppButton } from './components/ui/WhatsAppButton'
 import { ChatBot } from './components/ui/ChatBot'
@@ -42,9 +45,12 @@ export default function App() {
       <Navbar />
       <main>
         <Hero />
+        <About />
+        <Experience />
         <Gallery />
         <Booking />
         <Testimonials />
+        <FAQ />
         <Location />
       </main>
       <Footer />
