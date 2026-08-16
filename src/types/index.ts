@@ -6,12 +6,6 @@ export interface GalleryImage {
   height: number
 }
 
-export interface FAQItem {
-  id: number
-  question: string
-  answer: string
-}
-
 export interface Testimonial {
   id: number
   name: string
