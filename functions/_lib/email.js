@@ -32,14 +32,14 @@ const withTimeout = (promise, ms) =>
 class SmtpClient {
   constructor(env) {
     this.host = 'smtp.gmail.com'
-    this.port = 465
+    this.port = 587
     this.user = env.SMTP_USER
     this.password = String(env.SMTP_PASSWORD || '').replace(/\s+/g, '')
     this.buffer = ''
   }
 
   async connect() {
-    this.socket = connect({ hostname: this.host, port: this.port, secureTransport: 'on' })
+    this.socket = connect({ hostname: this.host, port: this.port, secureTransport: 'starttls' })
     this.reader = this.socket.readable.getReader()
     this.writer = this.socket.writable.getWriter()
     await this.expect(220, 'Conexión rechazada')
@@ -90,6 +90,9 @@ class SmtpClient {
       html,
     ].join('\r\n')
 
+    await this.say(250, `EHLO ${this.host}`)
+    await this.say(220, 'STARTTLS')
+    await new Promise((r) => setTimeout(r, 1500))
     await this.say(250, `EHLO ${this.host}`)
     await this.say(235, `AUTH PLAIN ${b64(`\u0000${this.user}\u0000${this.password}`)}`)
     await this.say(250, `MAIL FROM:<${from}>`)
@@ -188,12 +191,13 @@ export async function sendBookingEmail(env, booking) {
         subject: `🎟️ Tu reserva en DARKBAT está registrada — Código ${code}`,
         html,
       })
+      return { ok: true }
     } catch (e) {
       console.error('SMTP send error', e)
+      return { ok: false, error: String(e) }
     } finally {
       await client.close()
     }
-    return
   }
 
   if (env.RESEND_API_KEY && env.EMAIL_FROM) {
@@ -211,9 +215,14 @@ export async function sendBookingEmail(env, booking) {
       if (!res.ok) {
         const body = await res.text()
         console.error('Resend send error', res.status, body)
+        return { ok: false, error: `Resend ${res.status}: ${body}` }
       }
+      return { ok: true }
     } catch (e) {
       console.error('Booking email error', e)
+      return { ok: false, error: String(e) }
     }
   }
+
+  return { ok: false, error: 'SMTP no configurado' }
 }
