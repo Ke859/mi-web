@@ -1,5 +1,3 @@
-import { connect } from 'cloudflare:sockets'
-
 const formatCOP = (n) => `$${Number(n || 0).toLocaleString('es-CO')} COP`
 
 const fmtDate = (d) => {
@@ -12,108 +10,9 @@ const fmtDate = (d) => {
 
 const realEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').toLowerCase()) && !String(e).toLowerCase().startsWith('wa-')
 
-const encodeHeader = (value) => {
-  const bytes = new TextEncoder().encode(String(value))
-  let bin = ''
-  bytes.forEach((b) => { bin += String.fromCharCode(b) })
-  return `=?UTF-8?B?${btoa(bin)}?=`
-}
-
-const b64 = (value) => {
-  const bytes = new TextEncoder().encode(String(value))
-  let bin = ''
-  bytes.forEach((b) => { bin += String.fromCharCode(b) })
-  return btoa(bin)
-}
-
-const withTimeout = (promise, ms) =>
-  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('Tiempo de espera agotado')), ms))])
-
-class SmtpClient {
-  constructor(env) {
-    this.host = 'smtp.gmail.com'
-    this.port = 465
-    this.user = env.SMTP_USER
-    this.password = String(env.SMTP_PASSWORD || '').replace(/\s+/g, '')
-    this.buffer = ''
-  }
-
-  async connect() {
-    this.socket = connect({ hostname: this.host, port: this.port, secureTransport: 'on' })
-    this.reader = this.socket.readable.getReader()
-    this.writer = this.socket.writable.getWriter()
-    await this.expect(220, 'Conexión rechazada')
-  }
-
-  async readResponse() {
-    const max = 64 * 1024
-    while (true) {
-      const nl = this.buffer.indexOf('\n')
-      if (nl !== -1) {
-        const line = this.buffer.slice(0, nl).replace(/\r$/, '')
-        this.buffer = this.buffer.slice(nl + 1)
-        const code = parseInt(line, 10)
-        const cont = line.length > 3 && line[3] === '-'
-        if (!cont) return { code, line }
-        continue
-      }
-      const { value, done } = await withTimeout(this.reader.read(), 15000)
-      if (done) throw new Error('Conexión cerrada por el servidor')
-      this.buffer += new TextDecoder().decode(value)
-      if (this.buffer.length > max) throw new Error('Respuesta SMTP demasiado larga')
-    }
-  }
-
-  async expect(code, message) {
-    const res = await this.readResponse()
-    if (res.code !== code) throw new Error(`${message}: ${res.line}`)
-    return res
-  }
-
-  async sendLine(line) {
-    await this.writer.write(new TextEncoder().encode(line + '\r\n'))
-  }
-
-  async say(code, line) {
-    await this.sendLine(line)
-    return this.expect(code, `SMTP ${line.split(' ')[0]} falló`)
-  }
-
-  async sendMail({ from, to, subject, html }) {
-    const data = [
-      `From: DARKBAT <${from}>`,
-      `To: <${to}>`,
-      `Subject: ${encodeHeader(subject)}`,
-      'MIME-Version: 1.0',
-      'Content-Type: text/html; charset=utf-8',
-      '',
-      html,
-    ].join('\r\n')
-
-    await this.say(250, `EHLO ${this.host}`)
-    await this.say(235, `AUTH PLAIN ${b64(`\u0000${this.user}\u0000${this.password}`)}`)
-    await this.say(250, `MAIL FROM:<${from}>`)
-    await this.say(250, `RCPT TO:<${to}>`)
-    await this.say(354, 'DATA')
-    await this.sendLine(data.replace(/\n/g, '\r\n').replace(/^\./gm, '..'))
-    await this.say(250, '.')
-    await this.sendLine('QUIT')
-    await withTimeout(this.socket.closed, 10000).catch(() => {})
-  }
-
-  async close() {
-    try {
-      this.reader?.releaseLock()
-      this.writer?.releaseLock()
-      this.socket?.close()
-    } catch {
-      // socket ya cerrado
-    }
-  }
-}
-
 export async function sendBookingEmail(env, booking) {
-  if (!realEmail(booking.email)) return
+  if (!env.BREVO_API_KEY) return { ok: false, error: 'Brevo no configurado' }
+  if (!realEmail(booking.email)) return { ok: false, error: 'Correo inválido' }
 
   const code = booking.code || (booking.id ? `DB-${String(booking.id).replace(/-/g, '').slice(0, 5).toUpperCase()}` : '')
   const total = Number(booking.total_cop || booking.people * 15000 || 0)
@@ -177,49 +76,25 @@ export async function sendBookingEmail(env, booking) {
       </div>
     </div>`
 
-  const from = env.EMAIL_FROM || env.SMTP_USER
-  if (env.SMTP_USER && env.SMTP_PASSWORD && from) {
-    const client = new SmtpClient(env)
-    try {
-      await withTimeout(client.connect(), 20000)
-      await client.sendMail({
-        from,
-        to: booking.email,
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: { email: env.EMAIL_FROM || 'Oficialdarkbat@gmail.com', name: 'DARKBAT' },
+        to: [{ email: booking.email, name: booking.name }],
         subject: `🎟️ Tu reserva en DARKBAT está registrada — Código ${code}`,
-        html,
-      })
-      return { ok: true }
-    } catch (e) {
-      console.error('SMTP send error', e)
-      return { ok: false, error: String(e) }
-    } finally {
-      await client.close()
+        htmlContent: html,
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      console.error('Brevo send error', res.status, body)
+      return { ok: false, error: `Brevo ${res.status}: ${body}` }
     }
+    return { ok: true }
+  } catch (e) {
+    console.error('Booking email error', e)
+    return { ok: false, error: String(e) }
   }
-
-  if (env.RESEND_API_KEY && env.EMAIL_FROM) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: env.EMAIL_FROM,
-          to: booking.email,
-          subject: `🎟️ Tu reserva en DARKBAT está registrada — Código ${code}`,
-          html,
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.text()
-        console.error('Resend send error', res.status, body)
-        return { ok: false, error: `Resend ${res.status}: ${body}` }
-      }
-      return { ok: true }
-    } catch (e) {
-      console.error('Booking email error', e)
-      return { ok: false, error: String(e) }
-    }
-  }
-
-  return { ok: false, error: 'SMTP no configurado' }
 }
