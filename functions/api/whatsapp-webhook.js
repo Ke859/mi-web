@@ -1,3 +1,5 @@
+import { sendBookingEmail } from '../_lib/email.js'
+
 const SLOT_TIMES = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00']
 const SLOT_CAPACITY = 50
 const ACTIVE_STATUS = 'payment_status=neq.rejected&payment_status=neq.cancelled&payment_status=neq.draft&payment_status=neq.awaiting_confirm&payment_status=neq.completed'
@@ -734,6 +736,7 @@ async function finalizeBooking(env, from, draft) {
     deposit_cop: deposit,
   })
   await sendTelegramAlert(env, { ...draft, total, deposit, depositRate: rate, receiptPath: null, source: 'bot' })
+  await sendBookingEmail(env, { ...draft, total_cop: total, deposit_cop: deposit })
   return sendWhatsApp(env, from, [
     `✅ ¡Reserva registrada correctamente!`,
     ``,

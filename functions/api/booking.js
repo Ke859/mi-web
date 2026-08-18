@@ -1,3 +1,5 @@
+import { sendBookingEmail } from '../_lib/email.js'
+
 const getDepositRate = (people) => {
   if (people >= 5 && people <= 10) return 0.1
   if (people >= 11 && people <= 20) return 0.15
@@ -68,6 +70,11 @@ export async function onRequestPost(context) {
         lunch, comments, total, deposit, depositRate, receiptPath, source,
       })
     }
+
+    await sendBookingEmail(env, {
+      id: bookingId, code: bookingCode, name, email, visit_date: date, visit_time: time,
+      people, lunch, comments, total_cop: total, deposit_cop: deposit,
+    })
 
     return Response.json({ ok: true, id: bookingId, code: bookingCode })
   } catch (e) {
