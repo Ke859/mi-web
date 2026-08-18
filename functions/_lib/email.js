@@ -32,14 +32,14 @@ const withTimeout = (promise, ms) =>
 class SmtpClient {
   constructor(env) {
     this.host = 'smtp.gmail.com'
-    this.port = 587
+    this.port = 465
     this.user = env.SMTP_USER
     this.password = String(env.SMTP_PASSWORD || '').replace(/\s+/g, '')
     this.buffer = ''
   }
 
   async connect() {
-    this.socket = connect({ hostname: this.host, port: this.port, secureTransport: 'starttls' })
+    this.socket = connect({ hostname: this.host, port: this.port, secureTransport: 'on' })
     this.reader = this.socket.readable.getReader()
     this.writer = this.socket.writable.getWriter()
     await this.expect(220, 'Conexión rechazada')
@@ -90,9 +90,6 @@ class SmtpClient {
       html,
     ].join('\r\n')
 
-    await this.say(250, `EHLO ${this.host}`)
-    await this.say(220, 'STARTTLS')
-    await new Promise((r) => setTimeout(r, 1500))
     await this.say(250, `EHLO ${this.host}`)
     await this.say(235, `AUTH PLAIN ${b64(`\u0000${this.user}\u0000${this.password}`)}`)
     await this.say(250, `MAIL FROM:<${from}>`)
