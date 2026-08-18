@@ -1,4 +1,4 @@
-import { sendBookingEmail } from '../../_lib/email.js'
+import { sendBookingEmail } from '../_lib/email.js'
 
 export async function onRequestGet(context) {
   const { env } = context
